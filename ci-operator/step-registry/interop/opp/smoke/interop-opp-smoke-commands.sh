@@ -26,9 +26,15 @@ typeset -a tcMessagesArr=()   # failure message (empty when pass)
 # ---------------------------------------------------------------------------
 
 AddResult() {
-    typeset name="${1:-}"; (($#)) && shift
-    typeset result="${1:-}"; (($#)) && shift
-    typeset message="${1:-}"; (($#)) && shift
+    typeset name=''
+    name="${1:-}"
+    (($#)) && shift
+    typeset result=''
+    result="${1:-}"
+    (($#)) && shift
+    typeset message=''
+    message="${1:-}"
+    (($#)) && shift
     tcNamesArr+=("${name}")
     tcResultsArr+=("${result}")
     tcMessagesArr+=("${message}")
@@ -36,17 +42,21 @@ AddResult() {
 }
 
 XmlEscape() {
-    typeset text="${1:-}"; (($#)) && shift
+    typeset text=''
+    text="${1:-}"
+    (($#)) && shift
     text="${text//&/&amp;}"
     text="${text//</&lt;}"
     text="${text//>/&gt;}"
     text="${text//\"/&quot;}"
     text="${text//\'/&apos;}"
     printf '%s' "${text}"
+    true
 }
 
 WriteJunit() {
-    typeset -i total=${#tcNamesArr[@]}
+    typeset -i total=0
+    total=${#tcNamesArr[@]}
     typeset -i failCount=0
     typeset -i skipCount=0
     for r in "${tcResultsArr[@]}"; do
@@ -61,15 +71,15 @@ WriteJunit() {
         echo '<?xml version="1.0" encoding="UTF-8"?>'
         echo "<testsuite name=\"opp-smoke\" tests=\"${total}\" failures=\"${failCount}\" skipped=\"${skipCount}\">"
         for i in "${!tcNamesArr[@]}"; do
-            typeset name=""
+            typeset name=''
             name="$(XmlEscape "${tcNamesArr[$i]}")"
             echo "  <testcase classname=\"opp-smoke\" name=\"${name}\">"
             if [[ "${tcResultsArr[$i]}" == "fail" ]]; then
-                typeset msg=""
+                typeset msg=''
                 msg="$(XmlEscape "${tcMessagesArr[$i]}")"
                 echo "    <failure message=\"${msg}\"></failure>"
             elif [[ "${tcResultsArr[$i]}" == "skip" ]]; then
-                typeset msg=""
+                typeset msg=''
                 msg="$(XmlEscape "${tcMessagesArr[$i]}")"
                 echo "    <skipped message=\"${msg}\"/>"
             fi
@@ -78,6 +88,7 @@ WriteJunit() {
         echo "</testsuite>"
     } > "${junitFile}"
     : "JUnit XML written to ${junitFile}"
+    true
 }
 
 # shellcheck disable=SC2317  # invoked via trap
@@ -102,9 +113,8 @@ trap '{( CollectExitArtifacts; _propagate_junit; true )}' EXIT
 
 TestClusterHealth() {
     : "=== Test: cluster-health ==="
-    typeset failMsg=""
+    typeset failMsg=''
 
-    # ClusterOperators: Available=True, Degraded!=True
     typeset coProblems=''
     coProblems="$(oc get clusteroperators -o json | jq -r '
         .items[]
@@ -126,7 +136,6 @@ TestClusterHealth() {
         : "PASS: All ClusterOperators healthy"
     fi
 
-    # Nodes: all Ready
     typeset nodeProblems=''
     nodeProblems="$(oc get nodes -o json | jq -r '
         .items[]
@@ -140,7 +149,8 @@ TestClusterHealth() {
     }
 
     if [[ -n "${nodeProblems}" ]]; then
-        typeset nodeMsg="Not-Ready nodes: ${nodeProblems//$'\n'/, }"
+        typeset nodeMsg=''
+        nodeMsg="Not-Ready nodes: ${nodeProblems//$'\n'/, }"
         if [[ -n "${failMsg}" ]]; then
             failMsg="${failMsg}; ${nodeMsg}"
         else
@@ -151,7 +161,6 @@ TestClusterHealth() {
         : "PASS: All nodes Ready"
     fi
 
-    # ClusterVersion: Available=True
     typeset cvAvailable=''
     cvAvailable="$(oc get clusterversion version -o json | jq -r '
         .status.conditions // [] | map(select(.type=="Available")) | first | .status
@@ -161,7 +170,8 @@ TestClusterHealth() {
     }
 
     if [[ "${cvAvailable}" != "True" ]]; then
-        typeset cvMsg="ClusterVersion Available=${cvAvailable:-unknown}"
+        typeset cvMsg=''
+        cvMsg="ClusterVersion Available=${cvAvailable:-unknown}"
         if [[ -n "${failMsg}" ]]; then
             failMsg="${failMsg}; ${cvMsg}"
         else
@@ -177,6 +187,7 @@ TestClusterHealth() {
     else
         AddResult "cluster-health" "fail" "${failMsg}"
     fi
+    true
 }
 
 # ---------------------------------------------------------------------------
@@ -185,29 +196,30 @@ TestClusterHealth() {
 
 TestOppOperators() {
     : "=== Test: opp-operators ==="
-    typeset failMsg=""
+    typeset failMsg=''
 
     typeset -a operatorsArr=()
     IFS=',' read -ra operatorsArr <<< "${OPP_OPERATORS}"
     for op in "${operatorsArr[@]}"; do
-        op="$(echo "${op}" | xargs)"  # trim whitespace
+        op="$(echo "${op}" | xargs)"
         : "Checking operator: ${op}"
 
-        # Find CSV matching this operator prefix
         typeset csvInfo=''
         csvInfo="$(oc get csv --all-namespaces -o json | jq -r --arg prefix "${op}" '
             .items[]
             | select(.metadata.name | startswith($prefix))
             | "\(.metadata.namespace)/\(.metadata.name)/\(.status.phase)"
         ' | head -1)" || {
-            typeset apiMsg="Failed to query CSVs for ${op}"
+            typeset apiMsg=''
+            apiMsg="Failed to query CSVs for ${op}"
             : "FAIL: ${apiMsg}"
             if [[ -n "${failMsg}" ]]; then failMsg="${failMsg}; ${apiMsg}"; else failMsg="${apiMsg}"; fi
             continue
         }
 
         if [[ -z "${csvInfo}" ]]; then
-            typeset notFoundMsg="CSV not found for ${op}"
+            typeset notFoundMsg=''
+            notFoundMsg="CSV not found for ${op}"
             : "FAIL: ${notFoundMsg}"
             if [[ -n "${failMsg}" ]]; then
                 failMsg="${failMsg}; ${notFoundMsg}"
@@ -217,13 +229,16 @@ TestOppOperators() {
             continue
         fi
 
-        typeset csvNs="" csvName="" csvPhase=""
+        typeset csvNs=''
+        typeset csvName=''
+        typeset csvPhase=''
         csvNs="$(echo "${csvInfo}" | cut -d/ -f1)"
         csvName="$(echo "${csvInfo}" | cut -d/ -f2)"
         csvPhase="$(echo "${csvInfo}" | cut -d/ -f3)"
 
         if [[ "${csvPhase}" != "Succeeded" ]]; then
-            typeset phaseMsg="CSV ${csvName} in phase ${csvPhase} (expected Succeeded)"
+            typeset phaseMsg=''
+            phaseMsg="CSV ${csvName} in phase ${csvPhase} (expected Succeeded)"
             : "FAIL: ${phaseMsg}"
             if [[ -n "${failMsg}" ]]; then
                 failMsg="${failMsg}; ${phaseMsg}"
@@ -234,7 +249,6 @@ TestOppOperators() {
             : "PASS: CSV ${csvName} phase=Succeeded"
         fi
 
-        # Check pods are Ready in the operator namespace (with settling window)
         : "Waiting ${SMOKE_SETTLE_SECONDS}s settling window for pods in ${csvNs}..."
         sleep "${SMOKE_SETTLE_SECONDS}"
 
@@ -247,14 +261,16 @@ TestOppOperators() {
             )
             | .metadata.name
         ')" || {
-            typeset podApiMsg="Failed to query pods in ${csvNs}"
+            typeset podApiMsg=''
+            podApiMsg="Failed to query pods in ${csvNs}"
             : "FAIL: ${podApiMsg}"
             if [[ -n "${failMsg}" ]]; then failMsg="${failMsg}; ${podApiMsg}"; else failMsg="${podApiMsg}"; fi
             continue
         }
 
         if [[ -n "${notReadyPods}" ]]; then
-            typeset podMsg="Not-ready pods in ${csvNs}: ${notReadyPods//$'\n'/, }"
+            typeset podMsg=''
+            podMsg="Not-ready pods in ${csvNs}: ${notReadyPods//$'\n'/, }"
             : "FAIL: ${podMsg}"
             if [[ -n "${failMsg}" ]]; then
                 failMsg="${failMsg}; ${podMsg}"
@@ -271,6 +287,7 @@ TestOppOperators() {
     else
         AddResult "opp-operators" "fail" "${failMsg}"
     fi
+    true
 }
 
 # ---------------------------------------------------------------------------
@@ -279,9 +296,8 @@ TestOppOperators() {
 
 TestAcmConnectivity() {
     : "=== Test: acm-connectivity ==="
-    typeset failMsg=""
+    typeset failMsg=''
 
-    # Check if ManagedCluster resources exist
     typeset -i mcCount=0
     mcCount=$(oc get managedclusters -o json | jq '.items | length') || {
         AddResult "acm-connectivity" "fail" "Failed to query ManagedClusters"
@@ -318,6 +334,7 @@ TestAcmConnectivity() {
     else
         AddResult "acm-connectivity" "fail" "${failMsg}"
     fi
+    true
 }
 
 # ---------------------------------------------------------------------------
@@ -326,9 +343,8 @@ TestAcmConnectivity() {
 
 TestAcsSensors() {
     : "=== Test: acs-sensors ==="
-    typeset failMsg=""
+    typeset failMsg=''
 
-    # Check SecuredCluster CR status first
     typeset scStatus=''
     scStatus="$(oc get securedclusters.platform.stackrox.io --all-namespaces -o json | jq -r '
         .items[]
@@ -339,14 +355,15 @@ TestAcsSensors() {
     }
 
     if [[ -n "${scStatus}" ]]; then
-        typeset scNs="" scName="" scConds=""
+        typeset scNs=''
+        typeset scName=''
+        typeset scConds=''
         scNs="$(echo "${scStatus}" | cut -d/ -f1)"
         scName="$(echo "${scStatus}" | cut -d/ -f2)"
         scConds="$(echo "${scStatus}" | cut -d/ -f3)"
         : "SecuredCluster ${scName} in ${scNs}: conditions=${scConds}"
 
-        # Verify sensor pods are Running in the SecuredCluster namespace
-        typeset sensorStatus=""
+        typeset sensorStatus=''
         sensorStatus="$(oc get pods -n "${scNs}" -l app=sensor -o json | jq -r '
             .items[] | "\(.metadata.name):\(.status.phase)"
         ')" || true
@@ -355,7 +372,7 @@ TestAcsSensors() {
             failMsg="No sensor pods found in ${scNs}"
             : "FAIL: ${failMsg}"
         else
-            typeset badSensors=""
+            typeset badSensors=''
             badSensors="$(echo "${sensorStatus}" | sed -e '/:Running$/d' || true)"
             if [[ -n "${badSensors}" ]]; then
                 failMsg="Sensor pods not running: ${badSensors//$'\n'/, }"
@@ -365,7 +382,6 @@ TestAcsSensors() {
             fi
         fi
     else
-        # No SecuredCluster CR; check if ACS operator is even installed
         typeset acsCsv=''
         acsCsv="$(oc get csv --all-namespaces -o json | jq -r '
             .items[] | select(.metadata.name | startswith("rhacs-operator")) | .metadata.name
@@ -377,7 +393,6 @@ TestAcsSensors() {
             return
         fi
 
-        # ACS operator installed but no SecuredCluster CR
         : "SKIP: ACS operator installed but no SecuredCluster CR found"
         AddResult "acs-sensors" "skip" "ACS operator installed but no SecuredCluster CR found"
         return
@@ -388,6 +403,7 @@ TestAcsSensors() {
     else
         AddResult "acs-sensors" "fail" "${failMsg}"
     fi
+    true
 }
 
 # ---------------------------------------------------------------------------
@@ -396,9 +412,8 @@ TestAcsSensors() {
 
 TestQuayPull() {
     : "=== Test: quay-pull ==="
-    typeset failMsg=""
+    typeset failMsg=''
 
-    # Find the Quay registry route
     typeset quayRoute=''
     quayRoute="$(oc get routes --all-namespaces -o json | jq -r '
         .items[]
@@ -408,14 +423,12 @@ TestQuayPull() {
     ' | head -1)" || : "Route query failed, trying QuayRegistry CR..."
 
     if [[ -z "${quayRoute}" ]]; then
-        # Try looking for QuayRegistry CR to find the route
         quayRoute="$(oc get quayregistries.quay.redhat.com --all-namespaces -o json | jq -r '
             .items[0].status.registryEndpoint // empty
         ' | sed 's|^https://||')" || : "QuayRegistry CR query failed"
     fi
 
     if [[ -z "${quayRoute}" ]]; then
-        # Check if Quay operator is even installed
         typeset quayCsv=''
         quayCsv="$(oc get csv --all-namespaces -o json | jq -r '
             .items[] | select(.metadata.name | startswith("quay-operator")) | .metadata.name
@@ -438,8 +451,6 @@ TestQuayPull() {
 
     : "Found Quay route: ${quayRoute}"
 
-    # Attempt to pull the Quay health endpoint (API check instead of image pull
-    # since we may not have registry credentials configured)
     typeset httpCode=''
     httpCode="$(curl -sk -o /dev/null -w '%{http_code}' "https://${quayRoute}/api/v1/discovery" --max-time 30)" || httpCode=""
 
@@ -455,6 +466,7 @@ TestQuayPull() {
     else
         AddResult "quay-pull" "fail" "${failMsg}"
     fi
+    true
 }
 
 # ---------------------------------------------------------------------------
@@ -471,15 +483,14 @@ Main() {
     : "Settle window: ${SMOKE_SETTLE_SECONDS}s"
     : "Artifacts dir: ${ARTIFACT_DIR}"
 
-    TestClusterHealth      || true
-    TestOppOperators       || true
-    TestAcmConnectivity    || true
-    TestAcsSensors         || true
-    TestQuayPull           || true
+    TestClusterHealth || true
+    TestOppOperators || true
+    TestAcmConnectivity || true
+    TestAcsSensors || true
+    TestQuayPull || true
 
     WriteJunit
 
-    # Determine overall result
     typeset -i hasAnyFail=0
     for r in "${tcResultsArr[@]}"; do
         if [[ "${r}" == "fail" ]]; then

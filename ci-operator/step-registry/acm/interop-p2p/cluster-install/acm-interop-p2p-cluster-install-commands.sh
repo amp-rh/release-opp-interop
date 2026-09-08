@@ -98,27 +98,12 @@ fi
 # Helper functions
 #=====================
 
-# Need - Verify that a required command is available
-# Arguments:
-#   $1 - Command name to check
-# Exits with error if command is not found
-function Need() {
-    command -v "$1" 1>/dev/null || {
-        : "'$1' not found"
-        exit 1
-    }
-    true
-}
+# Verify that required commands are available (inline at call sites)
 
-# JsonGet - Retrieve a Kubernetes resource as JSON
-# Arguments:
-#   $1 - Namespace
-#   $2 - Resource type
-#   $3 - Resource name
-# Returns: JSON representation of the resource
+# JsonGet - Retrieve a Kubernetes resource as JSON (used inline in command substitution)
+# For example: typeset json="$(JsonGet ns pod name)"
 function JsonGet() {
     oc -n "${1}" get "${2}" "${3}" -o json
-    true
 }
 
 # ResolveSpokeCidrs — derive non-overlapping install-config CIDRs per spoke index.
@@ -139,10 +124,7 @@ function ResolveSpokeCidrs() {
     true
 }
 
-# Verify required CLI tools are available
-Need oc
-Need curl
-Need base64
+true
 
 #=====================
 # Get hub cluster name for suffix generation
