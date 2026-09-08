@@ -77,9 +77,9 @@ fi
 if (( ${#skipPoliciesArr[@]} > 0 )); then
   # Validate that skip-listed policies actually exist in the cluster
   typeset allPolicies=''
-  allPolicies="$(oc get policies -n policies -o name 2>/dev/null)" || true
+  allPolicies="$(oc get policies -n policies -o name 2>/dev/null)"
   for p in "${skipPoliciesArr[@]}"; do
-    if ! echo "${allPolicies}" | grep -q "/${p}$"; then
+    if ! printf '%s\n' "${allPolicies}" | grep -q "/${p}$"; then
       printf '[%s] WARNING: policy "%s" from SKIP_POLICIES not found in cluster (ignoring)\n' \
         "$(date -u +%FT%TZ)" "${p}"
     fi
@@ -87,17 +87,13 @@ if (( ${#skipPoliciesArr[@]} > 0 )); then
 
   # Build a regex to filter out skipped policies
   typeset skipRegex=''
-  skipRegex="$(IFS='|'; echo "${skipPoliciesArr[*]}")"
+  skipRegex="$(IFS='|'; printf '%s\n' "${skipPoliciesArr[*]}")"
   # Fetch the full policy list first — fail hard if oc cannot reach the cluster
   typeset policyList=''
-  policyList="$(oc get policies -n policies -o name)" || {
-    printf '[%s] ERROR: failed to list policies in namespace "policies"\n' \
-      "$(date -u +%FT%TZ)" >&2
-    exit 1
-  }
-  # Filter out skipped policies (grep no-match is tolerated via || true)
+  policyList="$(oc get policies -n policies -o name)"
+  # Filter out skipped policies (grep no-match is tolerated)
   typeset applyPolicies=''
-  applyPolicies="$(printf '%s\n' "${policyList}" | grep -Ev "/(${skipRegex})$")" || true
+  applyPolicies="$(printf '%s\n' "${policyList}" | sed -n "/\/(${skipRegex})$/!p")"
 
   if [[ -n "${applyPolicies}" ]]; then
     printf '[%s] Waiting for %d non-skipped polic(ies) to become Compliant…\n' \
@@ -119,15 +115,15 @@ if (( ${#skipPoliciesArr[@]} > 0 )); then
 else
   printf '[%s] No policies to skip — waiting for ALL policies to become Compliant…\n' \
     "$(date -u +%FT%TZ)"
-  if ! oc wait policies --all -n policies \
-    --for jsonpath='{.status.compliant}'=Compliant \
-    --timeout=40m; then
-    : "Policies failed to become compliant:"
-    oc get policies -n policies --ignore-not-found
-    oc get policies -n policies --ignore-not-found -o yaml
-    oc describe policies --all -n policies
-    exit 1
-  fi
+    if ! oc wait policies --all -n policies \
+      --for jsonpath='{.status.compliant}'=Compliant \
+      --timeout=40m; then
+      : "Policies failed to become compliant:"
+      oc get policies -n policies --ignore-not-found
+      oc get policies -n policies --ignore-not-found -o yaml
+      oc describe policies --all -n policies
+      exit 1
+    fi
 fi
 
 true

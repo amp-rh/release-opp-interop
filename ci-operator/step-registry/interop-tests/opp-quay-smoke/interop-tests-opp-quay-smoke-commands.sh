@@ -77,12 +77,12 @@ EOF
     true
 }
 
-function _propagate_junit () {
+function PropagateJunit () {
     mkdir -p "${SHARED_DIR}/junit"
     find "${ARTIFACT_DIR}" -name '*.xml' -exec cp {} "${SHARED_DIR}/junit/" \; 2>/dev/null
 }
 
-trap '{( GenerateJunit; _propagate_junit; true )}' EXIT
+trap '{( GenerateJunit; PropagateJunit; true )}' EXIT
 
 function DiscoverQuay () {
     typeset registryJson="" discoverErr=""
@@ -617,4 +617,4 @@ function Main () {
 }
 
 Main "$@"
-
+true
