@@ -20,7 +20,7 @@
 # The CI cluster is ephemeral -- lowering thresholds is safe here.
 # ---------------------------------------------------------------------------
 
-set -euo pipefail
+set -eux -o pipefail; shopt -s inherit_errexit
 
 if [[ -f "${SHARED_DIR}/kubeconfig" ]]; then
     export KUBECONFIG="${SHARED_DIR}/kubeconfig"

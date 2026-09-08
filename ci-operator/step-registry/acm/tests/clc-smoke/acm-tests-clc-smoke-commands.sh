@@ -1,11 +1,12 @@
 #!/bin/bash
 set -euxo pipefail; shopt -s inherit_errexit
 
-_propagate_junit () {
+function _propagate_junit () {
     mkdir -p "${SHARED_DIR}/junit"
-    find "${ARTIFACT_DIR}" -name '*.xml' -exec cp {} "${SHARED_DIR}/junit/" \; 2>/dev/null || true
+    find "${ARTIFACT_DIR}" -name '*.xml' -exec cp {} "${SHARED_DIR}/junit/" \;
+    true
 }
-trap _propagate_junit EXIT
+trap '{( _propagate_junit; true )}' EXIT
 
 typeset secretsDir="/tmp/secrets"
 typeset optionFile="./options.yaml"

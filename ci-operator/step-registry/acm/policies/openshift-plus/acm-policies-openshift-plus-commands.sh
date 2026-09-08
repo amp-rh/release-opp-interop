@@ -77,7 +77,7 @@ fi
 if (( ${#skipPoliciesArr[@]} > 0 )); then
   # Validate that skip-listed policies actually exist in the cluster
   typeset allPolicies=""
-  allPolicies="$(oc get policies -n policies -o name 2>/dev/null)" || true
+  allPolicies="$(oc get policies -n policies -o name)"
   for p in "${skipPoliciesArr[@]}"; do
     if ! echo "${allPolicies}" | grep -q "/${p}$"; then
       printf '[%s] WARNING: policy "%s" from SKIP_POLICIES not found in cluster (ignoring)\n' \
@@ -97,7 +97,7 @@ if (( ${#skipPoliciesArr[@]} > 0 )); then
   }
   # Filter out skipped policies (grep no-match is tolerated via || true)
   typeset applyPolicies=""
-  applyPolicies="$(printf '%s\n' "${policyList}" | grep -Ev "/(${skipRegex})$")" || true
+  applyPolicies="$(printf '%s\n' "${policyList}" | grep -Ev "/(${skipRegex})$")"
 
   if [[ -n "${applyPolicies}" ]]; then
     printf '[%s] Waiting for %d non-skipped polic(ies) to become Compliant…\n' \
