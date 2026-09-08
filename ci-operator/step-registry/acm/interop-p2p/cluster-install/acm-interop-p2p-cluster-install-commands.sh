@@ -34,7 +34,7 @@
 #   - Sufficient leases acquired for the number of clusters
 #
 
-set -euxo pipefail; shopt -s inherit_errexit
+set -eux -o pipefail; shopt -s inherit_errexit
 eval "$(
     typeset -a _fURL=()
     type -t wget 1>/dev/null && _fURL=(wget -nv -O-) || _fURL=(curl -fsSL)
@@ -103,7 +103,7 @@ fi
 # Arguments:
 #   $1 - Command name to check
 # Exits with error if command is not found
-Need() {
+function Need () {
     command -v "$1" 1>/dev/null || {
         : "'$1' not found"
         exit 1
@@ -117,7 +117,7 @@ Need() {
 #   $2 - Resource type
 #   $3 - Resource name
 # Returns: JSON representation of the resource
-JsonGet() {
+function JsonGet () {
     oc -n "${1}" get "${2}" "${3}" -o json
     true
 }
@@ -129,7 +129,7 @@ JsonGet() {
 #   $1 - cluster_idx (1-based)
 # Sets (caller-visible):
 #   clusterNetworkCidr, machineNetworkCidr, serviceNetworkCidr
-ResolveSpokeCidrs() {
+function ResolveSpokeCidrs () {
     typeset -i clusterIdx="${1:?}"
     typeset -i clusterNetworkBaseOctet=$((128 + clusterIdx * 4))
     typeset -i serviceNetworkBaseOctet=$((30 + clusterIdx))
@@ -150,8 +150,10 @@ Need base64
 #=====================
 # Extract the hub cluster name from metadata.json
 # This is used to generate unique spoke cluster names
-typeset hubClusterName
-hubClusterName="$(jq -r '.clusterName' "${SHARED_DIR}/metadata.json")"
+typeset hubClusterName=''
+typeset _tmpHubClusterName
+_tmpHubClusterName="$(jq -r '.clusterName' "${SHARED_DIR}/metadata.json")"
+hubClusterName="${_tmpHubClusterName}"
 if [[ -z "${hubClusterName}" ]]; then
     : "Could not extract hub cluster name from metadata.json"
     exit 1
@@ -172,15 +174,17 @@ if [[ -z "${ACM_SPOKE_CLUSTER_INITIAL_VERSION}" ]]; then
     exit 1
 fi
 : "Resolving cluster image set for version '${ACM_SPOKE_CLUSTER_INITIAL_VERSION}'"
-typeset clusterImagesetName
+typeset clusterImagesetName=''
 # jq select avoids grep's non-zero exit on no match; sort -V preserves version ordering.
-clusterImagesetName="$(
+typeset _tmpClusterImagesetName
+_tmpClusterImagesetName="$(
     oc get clusterimagesets.hive.openshift.io -o json |
     jq -r --arg prefix "img${ACM_SPOKE_CLUSTER_INITIAL_VERSION}." \
         '.items[].metadata.name | select(startswith($prefix))' |
     sort -V |
     tail -n 1
 )"
+clusterImagesetName="${_tmpClusterImagesetName}"
 
 if [[ -z "${clusterImagesetName}" ]]; then
     : "No cluster image set found for version '${ACM_SPOKE_CLUSTER_INITIAL_VERSION}'"
@@ -196,11 +200,13 @@ fi
 : "Using cluster image set: ${clusterImagesetName}"
 
 # Log the release image URL for debugging purposes
-typeset ocpReleaseImage
-ocpReleaseImage="$(
+typeset ocpReleaseImage=''
+typeset _tmpOcpReleaseImage
+_tmpOcpReleaseImage="$(
     oc get clusterimageset "${clusterImagesetName}" \
         -o jsonpath='{.spec.releaseImage}' || true
 )"
+ocpReleaseImage="${_tmpOcpReleaseImage}"
 
 if [[ -n "${ocpReleaseImage}" ]]; then
     : "Cluster image set release image: ${ocpReleaseImage}"
@@ -211,8 +217,10 @@ fi
 #=====================
 # Create a base suffix from the hub cluster name hash (first 5 chars)
 # This ensures spoke cluster names are unique per hub cluster
-typeset baseSuffix
-baseSuffix="$(printf '%s' "${hubClusterName}" | sha1sum | cut -c1-5)"
+typeset baseSuffix=''
+typeset _tmpBaseSuffix
+_tmpBaseSuffix="$(printf '%s' "${hubClusterName}" | sha1sum | cut -c1-5)"
+baseSuffix="${_tmpBaseSuffix}"
 if [[ -z "${baseSuffix}" ]]; then
     : "Failed to generate cluster name base suffix"
     exit 1
@@ -223,14 +231,14 @@ fi
 typeset -a clusterNamesArr=()
 typeset uniqueSuffix=""
 typeset clusterName=""
-for ((i = 1; i <= ACM_SPOKE_CLUSTER_COUNT; i++)); do
+for ((i = 1; i <= ACM_SPOKE_CLUSTER_COUNT; ++i)); do
     uniqueSuffix="${baseSuffix}-${i}"
     clusterName="${ACM_SPOKE_CLUSTER_NAME_PREFIX}-${uniqueSuffix}"
     clusterNamesArr+=("${clusterName}")
 done
 
 : "Will create ${#clusterNamesArr[@]} cluster(s):"
-for ((i = 0; i < ${#clusterNamesArr[@]}; i++)); do
+for ((i = 0; i < ${#clusterNamesArr[@]}; ++i)); do
     ResolveSpokeCidrs "$((i + 1))"
     : "  Cluster $((i+1)): ${clusterNamesArr[i]} -> Region: ${clusterRegionsArr[i]} pod=${clusterNetworkCidr} vpc=${machineNetworkCidr} svc=${serviceNetworkCidr}"
 done
@@ -242,7 +250,7 @@ done
 typeset -i clusterIndex=0
 typeset clusterNameFile=""
 for clusterName in "${clusterNamesArr[@]}"; do
-    (( ++clusterIndex ))
+    ((++clusterIndex))
     clusterNameFile="${SHARED_DIR}/managed-cluster-name-${clusterIndex}"
     printf '%s\n' "${clusterName}" > "${clusterNameFile}"
     : "Cluster ${clusterIndex} name '${clusterName}' written to ${clusterNameFile}"
@@ -260,7 +268,7 @@ printf '%s\n' "${clusterRegionsArr[@]}" > "${allClusterRegionsFile}"
 
 # Write per-cluster network CIDRs (one CIDR per line, aligned with cluster index)
 typeset -a clusterNetworkCidrsArr=() machineNetworkCidrsArr=() serviceNetworkCidrsArr=()
-for ((i = 1; i <= ACM_SPOKE_CLUSTER_COUNT; i++)); do
+for ((i = 1; i <= ACM_SPOKE_CLUSTER_COUNT; ++i)); do
     ResolveSpokeCidrs "${i}"
     clusterNetworkCidrsArr+=("${clusterNetworkCidr}")
     machineNetworkCidrsArr+=("${machineNetworkCidr}")
@@ -296,7 +304,7 @@ printf '%s\n' "${clusterNamesArr[0]}" > "${SHARED_DIR}/managed-cluster-name"
 #   - ManagedCluster (ACM resource for cluster management)
 #   - KlusterletAddonConfig (enables ACM add-ons on spoke)
 #
-CreateClusterResources() {
+function CreateClusterResources () {
     typeset clusterName="$1"
     typeset clusterIdx="$2"
     typeset clusterRegion="$3"
@@ -359,7 +367,8 @@ ocEOF
     oc -n "${clusterName}" create secret generic acm-aws-secret \
         --type=Opaque \
         --from-file=aws_access_key_id=<(
-            typeset _wasTracing=false
+            typeset _wasTracing=''
+            _wasTracing=false
             [[ $- == *x* ]] && _wasTracing=true
             set +x
             printf '%s' "$(
@@ -370,7 +379,8 @@ ocEOF
             true
         ) \
         --from-file=aws_secret_access_key=<(
-            typeset _wasTracing=false
+            typeset _wasTracing=''
+            _wasTracing=false
             [[ $- == *x* ]] && _wasTracing=true
             set +x
             printf '%s' "$(
@@ -604,7 +614,7 @@ ocEOF
 #
 # Exits with error code 3 if provisioning fails or times out.
 #
-WaitForClusterProvisioned() {
+function WaitForClusterProvisioned () {
     typeset clusterName="$1"
     typeset clusterIdx="$2"
     typeset -i pollInterval=30
@@ -616,7 +626,7 @@ WaitForClusterProvisioned() {
     # parent script's elapsed-time counter. Exit codes propagate normally.
     (
         SECONDS=0
-        typeset cdJson provisioned stopReason stopMessage
+        typeset cdJson='' provisioned='' stopReason='' stopMessage=''
 
         while (( SECONDS < timeoutSecs )); do
             cdJson="$(JsonGet "${clusterName}" clusterdeployment "${clusterName}")" || {
@@ -666,6 +676,7 @@ WaitForClusterProvisioned() {
             <<< "${cdJson}" >&2
         exit 3
     )
+    true
 }
 
 #=====================
@@ -682,17 +693,19 @@ WaitForClusterProvisioned() {
 #   - ${SHARED_DIR}/managed-cluster-kubeconfig-{N}    : Admin kubeconfig
 #   - ${SHARED_DIR}/managed-cluster-metadata-{N}.json : Cluster metadata
 #
-ExtractClusterCredentials() {
+function ExtractClusterCredentials () {
     typeset clusterName="$1"
     typeset clusterIdx="$2"
 
     # Get the admin kubeconfig from the secret referenced in ClusterDeployment
     : "Extracting admin kubeconfig for cluster ${clusterIdx}: ${clusterName}"
-    typeset adminKubeconfigSecretName
-    adminKubeconfigSecretName="$(
+    typeset adminKubeconfigSecretName=''
+    typeset _tmpAdminKubeconfigSecretName
+    _tmpAdminKubeconfigSecretName="$(
         oc -n "${clusterName}" get "ClusterDeployment/${clusterName}" \
             -o jsonpath='{.spec.clusterMetadata.adminKubeconfigSecretRef.name}'
     )"
+    adminKubeconfigSecretName="${_tmpAdminKubeconfigSecretName}"
 
     if [[ -z "${adminKubeconfigSecretName}" ]]; then
         : "Failed to get admin kubeconfig secret name for ${clusterName}"
@@ -708,11 +721,13 @@ ExtractClusterCredentials() {
     : "Kubeconfig for cluster ${clusterIdx} saved to ${kubeconfigFile}"
 
     # Extract cluster metadata (contains infraID, clusterID, etc.)
-    typeset metadataSecret
-    metadataSecret="$(
+    typeset metadataSecret=''
+    typeset _tmpMetadataSecret
+    _tmpMetadataSecret="$(
         oc -n "${clusterName}" get "ClusterDeployment/${clusterName}" \
             -o jsonpath='{.spec.clusterMetadata.metadataJSONSecretRef.name}'
     )"
+    metadataSecret="${_tmpMetadataSecret}"
 
     if [[ -z "${metadataSecret}" ]]; then
         : "metadataJSONSecretRef is not set for ${clusterName}; metadata.json may not exist"
@@ -751,7 +766,7 @@ typeset -i idx=0
 # Phase 1: Create all cluster resources
 # This initiates the provisioning process for all clusters in parallel
 # Each cluster is deployed to its corresponding region from the lease
-for ((i = 0; i < ${#clusterNamesArr[@]}; i++)); do
+for ((i = 0; i < ${#clusterNamesArr[@]}; ++i)); do
     idx=$((i + 1))
     CreateClusterResources "${clusterNamesArr[i]}" "${idx}" "${clusterRegionsArr[i]}"
 done
@@ -760,7 +775,7 @@ done
 
 # Phase 2: Wait for all clusters to complete provisioning
 # Each cluster typically takes 30-45 minutes to provision
-for ((i = 0; i < ${#clusterNamesArr[@]}; i++)); do
+for ((i = 0; i < ${#clusterNamesArr[@]}; ++i)); do
     idx=$((i + 1))
     WaitForClusterProvisioned "${clusterNamesArr[i]}" "${idx}"
 done
@@ -768,7 +783,7 @@ done
 : "All clusters provisioned. Extracting credentials..."
 
 # Phase 3: Extract credentials for all provisioned clusters
-for ((i = 0; i < ${#clusterNamesArr[@]}; i++)); do
+for ((i = 0; i < ${#clusterNamesArr[@]}; ++i)); do
     idx=$((i + 1))
     ExtractClusterCredentials "${clusterNamesArr[i]}" "${idx}"
 done
@@ -782,7 +797,7 @@ ln -sf "managed-cluster-metadata-1.json" "${SHARED_DIR}/managed-cluster-metadata
 : "=========================================="
 : "All ${ACM_SPOKE_CLUSTER_COUNT} spoke cluster(s) provisioned and registered with ACM"
 : "=========================================="
-for ((i = 0; i < ${#clusterNamesArr[@]}; i++)); do
+for ((i = 0; i < ${#clusterNamesArr[@]}; ++i)); do
     idx=$((i + 1))
     : "Cluster ${idx}: ${clusterNamesArr[i]} (Region: ${clusterRegionsArr[i]})"
 done
@@ -791,4 +806,5 @@ done
 : "Cluster regions file: ${SHARED_DIR}/managed-cluster-regions"
 : "Individual cluster name files: ${SHARED_DIR}/managed-cluster-name-1 .. managed-cluster-name-${ACM_SPOKE_CLUSTER_COUNT}"
 : "Kubeconfig files: ${SHARED_DIR}/managed-cluster-kubeconfig-1 .. managed-cluster-kubeconfig-${ACM_SPOKE_CLUSTER_COUNT}"
+
 true

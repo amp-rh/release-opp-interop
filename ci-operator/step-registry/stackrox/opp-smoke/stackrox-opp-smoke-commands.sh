@@ -1,11 +1,11 @@
 #!/bin/bash
-set -euxo pipefail; shopt -s inherit_errexit
+set -eux -o pipefail; shopt -s inherit_errexit
 
-_propagate_junit () {
+function PropagatJunit () {
     mkdir -p "${SHARED_DIR}/junit"
-    find "${ARTIFACT_DIR}" -name '*.xml' -exec cp {} "${SHARED_DIR}/junit/" \; 2>/dev/null || true
+    find "${ARTIFACT_DIR}" -name '*.xml' -exec cp {} "${SHARED_DIR}/junit/" \; 2>/dev/null
 }
-trap _propagate_junit EXIT
+trap '{( PropagatJunit; )}' EXIT
 
 if [[ -f "${SHARED_DIR}/kubeconfig" ]]; then
     export KUBECONFIG="${SHARED_DIR}/kubeconfig"
@@ -13,9 +13,10 @@ fi
 
 echo "[smoke] Reading connection details from SHARED_DIR..."
 
-typeset centralUrl=''
+typeset centralUrl
 centralUrl="$(cat "${SHARED_DIR}/CENTRAL_URL")"
-ROX_ADMIN_PASSWORD="$(cat "${SHARED_DIR}/ROX_ADMIN_PASSWORD")"
+typeset roxAdminPassword
+roxAdminPassword="$(cat "${SHARED_DIR}/ROX_ADMIN_PASSWORD")"
 
 echo "[smoke] Connection details loaded from SHARED_DIR"
 
@@ -40,7 +41,7 @@ chmod -R u+w /tmp/stackrox/qa-tests-backend/src/main/proto/scanner
 
 echo "[smoke] Materializing proto sources (replace symlinks with copies)..."
 cd /tmp/stackrox/qa-tests-backend/src/main/proto
-typeset target=''
+typeset target
 for link in api internalapi storage test tools; do
     if [[ -L "${link}" ]]; then
         target=$(readlink -f "${link}")
@@ -59,22 +60,26 @@ grep -q 'DEFAULT_CLUSTER_NAME = "local-cluster"' \
 export API_HOSTNAME="${centralUrl}"
 export API_PORT="443"
 export ROX_USERNAME="admin"
-export ROX_ADMIN_PASSWORD
+export ROX_ADMIN_PASSWORD="${roxAdminPassword}"
 export CLUSTER="OPENSHIFT"
 export CI="true"
 export POD_SECURITY_POLICIES="false"
 export TEST_TARGET="smoke-test"
-REGISTRY_USERNAME="$(cat /tmp/vault/stackrox-stackrox-e2e-tests/QUAY_RHACS_ENG_RO_USERNAME)"
-export REGISTRY_USERNAME
-REGISTRY_PASSWORD="$(cat /tmp/vault/stackrox-stackrox-e2e-tests/QUAY_RHACS_ENG_RO_PASSWORD)"
-export REGISTRY_PASSWORD
+typeset registryUsername
+registryUsername="$(cat /tmp/vault/stackrox-stackrox-e2e-tests/QUAY_RHACS_ENG_RO_USERNAME)"
+export REGISTRY_USERNAME="${registryUsername}"
+typeset registryPassword
+registryPassword="$(cat /tmp/vault/stackrox-stackrox-e2e-tests/QUAY_RHACS_ENG_RO_PASSWORD)"
+export REGISTRY_PASSWORD="${registryPassword}"
 if [[ -f /tmp/vault/stackrox-stackrox-e2e-tests/GOOGLE_CREDENTIALS_GCR_SCANNER_V2 ]]; then
-    GOOGLE_CREDENTIALS_GCR_SCANNER_V2="$(cat /tmp/vault/stackrox-stackrox-e2e-tests/GOOGLE_CREDENTIALS_GCR_SCANNER_V2)"
-    export GOOGLE_CREDENTIALS_GCR_SCANNER_V2
+    typeset googleCredentialsGcrScannerV2
+    googleCredentialsGcrScannerV2="$(cat /tmp/vault/stackrox-stackrox-e2e-tests/GOOGLE_CREDENTIALS_GCR_SCANNER_V2)"
+    export GOOGLE_CREDENTIALS_GCR_SCANNER_V2="${googleCredentialsGcrScannerV2}"
 fi
 if [[ -f /tmp/vault/stackrox-stackrox-e2e-tests/GOOGLE_ARTIFACT_REGISTRY_SERVICE_ACCOUNT_V2 ]]; then
-    GOOGLE_ARTIFACT_REGISTRY_SERVICE_ACCOUNT_V2="$(cat /tmp/vault/stackrox-stackrox-e2e-tests/GOOGLE_ARTIFACT_REGISTRY_SERVICE_ACCOUNT_V2)"
-    export GOOGLE_ARTIFACT_REGISTRY_SERVICE_ACCOUNT_V2
+    typeset googleArtifactRegistryServiceAccountV2
+    googleArtifactRegistryServiceAccountV2="$(cat /tmp/vault/stackrox-stackrox-e2e-tests/GOOGLE_ARTIFACT_REGISTRY_SERVICE_ACCOUNT_V2)"
+    export GOOGLE_ARTIFACT_REGISTRY_SERVICE_ACCOUNT_V2="${googleArtifactRegistryServiceAccountV2}"
 fi
 
 cd /tmp/stackrox/qa-tests-backend
@@ -90,9 +95,12 @@ allprojects {
 INIT
 
 echo "[smoke] Running testSMOKE..."
-typeset -i testExit=0
-./gradlew testSMOKE --no-daemon --init-script /tmp/fix-proto-deps.gradle \
-    -Dorg.gradle.jvmargs="-Xmx2g" || testExit=$?
+typeset -i testExit
+testExit=0
+if ! ./gradlew testSMOKE --no-daemon --init-script /tmp/fix-proto-deps.gradle \
+    -Dorg.gradle.jvmargs="-Xmx2g"; then
+    testExit=$?
+fi
 
 echo "[smoke] Copying JUnit results to ARTIFACT_DIR..."
 if [[ -d build/test-results/testSMOKE ]]; then

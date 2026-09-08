@@ -1,5 +1,6 @@
 #!/bin/bash
-set -euxo pipefail; shopt -s inherit_errexit
+set -eux -o pipefail
+shopt -s inherit_errexit
 
 # ---------------------------------------------------------------------------
 # ACM Observability + ODF Interop Validation (6-point gate)
@@ -11,11 +12,15 @@ set -euxo pipefail; shopt -s inherit_errexit
 # Produces JUnit XML consumed by Prow / Sippy / TestGrid.
 # ---------------------------------------------------------------------------
 
-typeset acmNamespace="${ACM_NAMESPACE:-open-cluster-management}"
-typeset obsNamespace="${OBS_NAMESPACE:-open-cluster-management-observability}"
-typeset odfNamespace="${ODF_NAMESPACE:-openshift-storage}"
+typeset acmNamespace=''
+acmNamespace="${ACM_NAMESPACE:-open-cluster-management}"
+typeset obsNamespace=''
+obsNamespace="${OBS_NAMESPACE:-open-cluster-management-observability}"
+typeset odfNamespace=''
+odfNamespace="${ODF_NAMESPACE:-openshift-storage}"
 
-typeset junitFile="${ARTIFACT_DIR}/junit_observability_odf.xml"
+typeset junitFile=''
+junitFile="${ARTIFACT_DIR}/junit_observability_odf.xml"
 
 typeset -a tcNamesArr=()
 typeset -a tcResultsArr=()
@@ -97,12 +102,13 @@ function CollectExitArtifacts () {
     true
 }
 
-_propagate_junit () {
+function PropagateJunit () {
     mkdir -p "${SHARED_DIR}/junit"
     find "${ARTIFACT_DIR}" -name '*.xml' -exec cp {} "${SHARED_DIR}/junit/" \; 2>/dev/null || true
+    true
 }
 
-trap '{( CollectExitArtifacts; _propagate_junit; true )}' EXIT
+trap '{( CollectExitArtifacts; PropagateJunit; true )}' EXIT
 
 # ---------------------------------------------------------------------------
 # Check 1: ODF Ceph RGW infrastructure ready
@@ -112,7 +118,8 @@ function CheckRgwReady () {
     : "=== Check 1: ODF Ceph RGW infrastructure ==="
 
     typeset rgwPhase=""
-    typeset rgwJson="" rgwErr=""
+    typeset rgwJson=""
+    typeset rgwErr=""
     if ! rgwJson="$(oc get cephobjectstore -n "${odfNamespace}" -o json 2>&1)"; then
         rgwErr="${rgwJson}"
         if [[ "${rgwErr}" == *"the server doesn"*"have a resource type"* || "${rgwErr}" == *"NotFound"* ]]; then

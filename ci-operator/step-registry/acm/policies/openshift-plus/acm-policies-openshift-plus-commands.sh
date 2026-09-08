@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euxo pipefail; shopt -s inherit_errexit
+set -eux -o pipefail
 
 cd /tmp/
 git clone https://github.com/stolostron/policy-collection.git
@@ -12,7 +12,8 @@ if [[ -n "${QUAY_OPERATOR_CHANNEL}" ]]; then
     echo "Invalid QUAY_OPERATOR_CHANNEL: ${QUAY_OPERATOR_CHANNEL}" >&2
     exit 1
   fi
-  typeset quayPolicyFile="../policygenerator/policy-sets/stable/openshift-plus/input-quay/policy-install-quay.yaml"
+  typeset quayPolicyFile=''
+  quayPolicyFile="../policygenerator/policy-sets/stable/openshift-plus/input-quay/policy-install-quay.yaml"
   sed -i "/^    name: quay-operator$/a\\    channel: ${QUAY_OPERATOR_CHANNEL}" "${quayPolicyFile}"
   grep -A5 'name: quay-operator' "${quayPolicyFile}"
 fi
@@ -20,8 +21,10 @@ echo 'y' | ./deploy.sh -p policygenerator/policy-sets/stable/openshift-plus -n p
 
 # openshift-plus generates ~25 policies; require 4+ before oc wait to avoid
 # racing the GitOps Subscription propagation (stolostron/policy-collection#174)
-typeset -i expectedMinPolicies=4
-typeset -i pollDeadline=$((SECONDS + 600))
+typeset -i expectedMinPolicies=0
+expectedMinPolicies=4
+typeset -i pollDeadline=0
+pollDeadline=$((SECONDS + 600))
 until (( $(oc get policies -n policies -o name 2>/dev/null | wc -l) >= expectedMinPolicies )); do
   ((SECONDS > pollDeadline)) && {
     printf '%s\n' "Error: fewer than ${expectedMinPolicies} policies after 10 minutes" >&2
@@ -32,7 +35,8 @@ done
 
 # Wait for Quay registry to be ready (checks operator-deployed Quay)
 typeset -a quayNamespacesArr=(quay openshift-quay quay-enterprise)
-typeset quayFound=false
+typeset quayFound=''
+quayFound=false
 typeset ns=''
 for ns in "${quayNamespacesArr[@]}"; do
   if (($(oc get quayregistry -n "${ns}" -o name 2>/dev/null | wc -l))); then
@@ -56,7 +60,7 @@ done
 # Non-existent policy names produce a warning, not a failure.
 typeset -a skipPoliciesArr=()
 if [[ -n "${SKIP_POLICIES:-}" ]]; then
-  IFS=',' read -ra skipPoliciesArr <<< "${SKIP_POLICIES}"
+  IFS=',' read -ra skipPoliciesArr <<<"${SKIP_POLICIES}"
   printf '[%s] SKIP_POLICIES set — will skip %d polic(ies):\n' \
     "$(date -u +%FT%TZ)" "${#skipPoliciesArr[@]}"
   for p in "${skipPoliciesArr[@]}"; do
@@ -76,7 +80,7 @@ fi
 
 if (( ${#skipPoliciesArr[@]} > 0 )); then
   # Validate that skip-listed policies actually exist in the cluster
-  typeset allPolicies=""
+  typeset allPolicies=''
   allPolicies="$(oc get policies -n policies -o name 2>/dev/null)" || true
   for p in "${skipPoliciesArr[@]}"; do
     if ! echo "${allPolicies}" | grep -q "/${p}$"; then
@@ -86,18 +90,14 @@ if (( ${#skipPoliciesArr[@]} > 0 )); then
   done
 
   # Build a regex to filter out skipped policies
-  typeset skipRegex=""
-  skipRegex="$(IFS='|'; echo "${skipPoliciesArr[*]}")"
+  typeset skipRegex=''
+  IFS='|' read -r skipRegex <<<"${skipPoliciesArr[*]}"
   # Fetch the full policy list first — fail hard if oc cannot reach the cluster
-  typeset policyList=""
-  policyList="$(oc get policies -n policies -o name)" || {
-    printf '[%s] ERROR: failed to list policies in namespace "policies"\n' \
-      "$(date -u +%FT%TZ)" >&2
-    exit 1
-  }
-  # Filter out skipped policies (grep no-match is tolerated via || true)
-  typeset applyPolicies=""
-  applyPolicies="$(printf '%s\n' "${policyList}" | grep -Ev "/(${skipRegex})$")" || true
+  typeset policyList=''
+  policyList="$(oc get policies -n policies -o name)"
+  # Filter out skipped policies (grep no-match is tolerated)
+  typeset applyPolicies=''
+  applyPolicies="$(printf '%s\n' "${policyList}" | sed -e "/\(${skipRegex}\)$/d")"
 
   if [[ -n "${applyPolicies}" ]]; then
     printf '[%s] Waiting for %d non-skipped polic(ies) to become Compliant…\n' \

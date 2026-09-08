@@ -23,7 +23,7 @@ mkdir -p "${REPORT_DIR}"
 typeset -i CHECKS_FAILED=0
 typeset -i EXIT_CODE=0
 
-function DebugOnExit () {
+function debugOnExit() {
     if (( EXIT_CODE != 0 )); then
         : "### DEBUG: Pre-flight failure diagnostics ###"
         : "# ClusterVersion"
@@ -44,8 +44,8 @@ function DebugOnExit () {
     true
 }
 
-trap '{ EXIT_CODE=$?; DebugOnExit; true; }' EXIT
-trap '{ EXIT_CODE=143; DebugOnExit; trap - EXIT; exit 143; }' TERM
+trap '{ EXIT_CODE=$?; debugOnExit; true; }' EXIT
+trap '{ EXIT_CODE=143; debugOnExit; trap - EXIT; exit 143; }' TERM
 
 # ──────────────────────────────────────────────────────────────────────
 #  Known removed / deprecated APIs per OCP minor version.
@@ -53,31 +53,31 @@ trap '{ EXIT_CODE=143; DebugOnExit; trap - EXIT; exit 143; }' TERM
 #  was removed IN that minor version (i.e. no longer available).
 #  Source: Kubernetes deprecation guide + OCP release notes.
 # ──────────────────────────────────────────────────────────────────────
-typeset -A REMOVED_APIS
-REMOVED_APIS["12"]="batch/v1beta1/CronJob policy/v1beta1/PodDisruptionBudget policy/v1beta1/PodSecurityPolicy discovery.k8s.io/v1beta1/EndpointSlice events.k8s.io/v1beta1/Event autoscaling/v2beta1/HorizontalPodAutoscaler"
-REMOVED_APIS["14"]="storage.k8s.io/v1beta1/CSIStorageCapacity"
-REMOVED_APIS["17"]="flowcontrol.apiserver.k8s.io/v1beta2/FlowSchema flowcontrol.apiserver.k8s.io/v1beta2/PriorityLevelConfiguration"
-REMOVED_APIS["18"]="flowcontrol.apiserver.k8s.io/v1beta3/FlowSchema flowcontrol.apiserver.k8s.io/v1beta3/PriorityLevelConfiguration"
+typeset -A removedApis
+removedApis["12"]="batch/v1beta1/CronJob policy/v1beta1/PodDisruptionBudget policy/v1beta1/PodSecurityPolicy discovery.k8s.io/v1beta1/EndpointSlice events.k8s.io/v1beta1/Event autoscaling/v2beta1/HorizontalPodAutoscaler"
+removedApis["14"]="storage.k8s.io/v1beta1/CSIStorageCapacity"
+removedApis["17"]="flowcontrol.apiserver.k8s.io/v1beta2/FlowSchema flowcontrol.apiserver.k8s.io/v1beta2/PriorityLevelConfiguration"
+removedApis["18"]="flowcontrol.apiserver.k8s.io/v1beta3/FlowSchema flowcontrol.apiserver.k8s.io/v1beta3/PriorityLevelConfiguration"
 
 # ──────────────────────────────────────────────────────────────────────
 #  OPP operator compatibility matrix.
 #  Maps OCP minor version to minimum required operator major.minor.
 #  Format: "operator_csv_prefix:min_major.min_minor"
 # ──────────────────────────────────────────────────────────────────────
-typeset -A OPP_COMPAT
-OPP_COMPAT["4.14"]="advanced-cluster-management:2.9 rhacs-operator:4.3 odf-operator:4.14 quay-operator:3.10"
-OPP_COMPAT["4.15"]="advanced-cluster-management:2.10 rhacs-operator:4.4 odf-operator:4.15 quay-operator:3.11"
-OPP_COMPAT["4.16"]="advanced-cluster-management:2.11 rhacs-operator:4.5 odf-operator:4.16 quay-operator:3.12"
-OPP_COMPAT["4.17"]="advanced-cluster-management:2.12 rhacs-operator:4.6 odf-operator:4.17 quay-operator:3.13"
-OPP_COMPAT["4.18"]="advanced-cluster-management:2.13 rhacs-operator:4.7 odf-operator:4.18 quay-operator:3.14"
-OPP_COMPAT["4.19"]="advanced-cluster-management:2.13 rhacs-operator:4.8 odf-operator:4.19 quay-operator:3.14"
-OPP_COMPAT["4.20"]="advanced-cluster-management:2.14 rhacs-operator:4.9 odf-operator:4.20 quay-operator:3.15"
-OPP_COMPAT["4.21"]="advanced-cluster-management:2.15 rhacs-operator:4.10 odf-operator:4.21 quay-operator:3.15"
-OPP_COMPAT["4.22"]="advanced-cluster-management:2.17 rhacs-operator:4.11 odf-operator:4.21 quay-operator:3.16"
-OPP_COMPAT["5.0"]="advanced-cluster-management:2.17 quay-operator:3.17 odf-operator:5.0 rhacs-operator:4.11"
-OPP_COMPAT["5.1"]="advanced-cluster-management:2.17 quay-operator:3.18 odf-operator:5.1 rhacs-operator:4.12"
+typeset -A oppCompat
+oppCompat["4.14"]="advanced-cluster-management:2.9 rhacs-operator:4.3 odf-operator:4.14 quay-operator:3.10"
+oppCompat["4.15"]="advanced-cluster-management:2.10 rhacs-operator:4.4 odf-operator:4.15 quay-operator:3.11"
+oppCompat["4.16"]="advanced-cluster-management:2.11 rhacs-operator:4.5 odf-operator:4.16 quay-operator:3.12"
+oppCompat["4.17"]="advanced-cluster-management:2.12 rhacs-operator:4.6 odf-operator:4.17 quay-operator:3.13"
+oppCompat["4.18"]="advanced-cluster-management:2.13 rhacs-operator:4.7 odf-operator:4.18 quay-operator:3.14"
+oppCompat["4.19"]="advanced-cluster-management:2.13 rhacs-operator:4.8 odf-operator:4.19 quay-operator:3.14"
+oppCompat["4.20"]="advanced-cluster-management:2.14 rhacs-operator:4.9 odf-operator:4.20 quay-operator:3.15"
+oppCompat["4.21"]="advanced-cluster-management:2.15 rhacs-operator:4.10 odf-operator:4.21 quay-operator:3.15"
+oppCompat["4.22"]="advanced-cluster-management:2.17 rhacs-operator:4.11 odf-operator:4.21 quay-operator:3.16"
+oppCompat["5.0"]="advanced-cluster-management:2.17 quay-operator:3.17 odf-operator:5.0 rhacs-operator:4.11"
+oppCompat["5.1"]="advanced-cluster-management:2.17 quay-operator:3.18 odf-operator:5.1 rhacs-operator:4.12"
 
-function InitReport () {
+function initReport() {
     cat > "${REPORT_FILE}" <<'EOFJSON'
 {
   "preflight_checks": []
@@ -86,8 +86,13 @@ EOFJSON
     true
 }
 
-function AppendCheck () {
-    typeset checkName="${1}" checkStatus="${2}" checkDetails="${3}"
+function appendCheck() {
+    typeset checkName
+    checkName="${1}"
+    typeset checkStatus
+    checkStatus="${2}"
+    typeset checkDetails
+    checkDetails="${3}"
     python3 -c "
 import json, sys
 with open(sys.argv[1]) as f:
@@ -99,27 +104,34 @@ with open(sys.argv[1], 'w') as f:
     true
 }
 
-function CheckApiDeprecations () {
+function checkApiDeprecations() {
     : "=== Check 1: API deprecation scan ==="
 
-    typeset targetMinor="${1}"
-    typeset ocpDisplay="${2:-4.${targetMinor}}"
-    typeset targetMajor="${ocpDisplay%%.*}"
-    typeset flagged="" foundCount=0
+    typeset targetMinor
+    targetMinor="${1}"
+    typeset ocpDisplay
+    ocpDisplay="${2:-4.${targetMinor}}"
+    typeset targetMajor
+    targetMajor="${ocpDisplay%%.*}"
+    typeset flagged
+    flagged=""
+    typeset foundCount
+    foundCount=0
 
     typeset clusterApis
     clusterApis="$(oc api-resources --no-headers)" || {
         : "WARNING: Failed to list API resources"
-        AppendCheck "api_deprecation_scan" "warn" "Could not list cluster API resources"
+        appendCheck "api_deprecation_scan" "warn" "Could not list cluster API resources"
         return 0
     }
 
-    for minor in "${!REMOVED_APIS[@]}"; do
+    for minor in "${!removedApis[@]}"; do
         if (( targetMajor > 4 || minor <= targetMinor )); then
-            for apiEntry in ${REMOVED_APIS[${minor}]}; do
-                typeset apiVersion apiKind
-                apiKind="${apiEntry##*/}"
+            for apiEntry in ${removedApis[${minor}]}; do
+                typeset apiVersion
                 apiVersion="${apiEntry%/*}"
+                typeset apiKind
+                apiKind="${apiEntry##*/}"
 
                 if echo "${clusterApis}" | grep -qw "${apiKind}" && \
                    oc api-resources --api-group="${apiVersion%%/*}" 2>/dev/null | grep -q "${apiVersion#*/}"; then
@@ -137,45 +149,54 @@ function CheckApiDeprecations () {
     if (( foundCount > 0 )); then
         : "WARNING: Found ${foundCount} deprecated API(s) still in use"
         echo -e "${flagged}"
-        AppendCheck "api_deprecation_scan" "warn" "Found ${foundCount} deprecated API(s) in use: ${flagged}"
+        appendCheck "api_deprecation_scan" "warn" "Found ${foundCount} deprecated API(s) in use: ${flagged}"
     else
         : "No deprecated APIs detected for target version ${ocpDisplay}"
-        AppendCheck "api_deprecation_scan" "pass" "No deprecated APIs detected for ${ocpDisplay}"
+        appendCheck "api_deprecation_scan" "pass" "No deprecated APIs detected for ${ocpDisplay}"
     fi
     true
 }
 
-function CheckOppCompatibility () {
+function checkOppCompatibility() {
     : "=== Check 2: OPP operator compatibility matrix ==="
 
-    typeset ocpKey="${1}"
-    typeset compatSpec="${OPP_COMPAT[${ocpKey}]:-}"
+    typeset ocpKey
+    ocpKey="${1}"
+    typeset compatSpec
+    compatSpec="${oppCompat[${ocpKey}]:-}"
     typeset allCsvs
-    typeset failed=0
+    typeset failed
+    failed=0
 
     allCsvs="$(oc get csv -A --no-headers)" || {
         : "Failed to retrieve CSVs"
-        AppendCheck "opp_compatibility_matrix" "fail" "Could not list CSVs"
+        appendCheck "opp_compatibility_matrix" "fail" "Could not list CSVs"
         (( CHECKS_FAILED += 1 ))
         return 0
     }
 
     if [[ -z "${compatSpec}" ]]; then
         : "No compatibility matrix entry for OCP ${ocpKey}; skipping version check"
-        AppendCheck "opp_compatibility_matrix" "skip" "No matrix entry for OCP ${ocpKey}"
+        appendCheck "opp_compatibility_matrix" "skip" "No matrix entry for OCP ${ocpKey}"
         return 0
     fi
 
-    typeset details=""
+    typeset details
+    details=""
     for entry in ${compatSpec}; do
-        typeset opPrefix="${entry%%:*}"
-        typeset minVersion="${entry##*:}"
-        typeset minMajor minMinor
+        typeset opPrefix
+        opPrefix="${entry%%:*}"
+        typeset minVersion
+        minVersion="${entry##*:}"
+        typeset minMajor
         minMajor="${minVersion%%.*}"
+        typeset minMinor
         minMinor="${minVersion##*.}"
 
-        typeset csvLine csvName installedVersion
+        typeset csvLine
         csvLine="$(echo "${allCsvs}" | grep "${opPrefix}" | head -1)" || true
+        typeset csvName
+        typeset installedVersion
         if [[ -z "${csvLine}" ]]; then
             : "Operator not found: ${opPrefix}"
             details="${details}${opPrefix}: NOT INSTALLED; "
@@ -192,8 +213,9 @@ function CheckOppCompatibility () {
             continue
         fi
 
-        typeset instMajor instMinor
+        typeset instMajor
         instMajor="${installedVersion%%.*}"
+        typeset instMinor
         instMinor="${installedVersion##*.}"
 
         if (( instMajor < minMajor || (instMajor == minMajor && instMinor < minMinor) )); then
@@ -208,19 +230,22 @@ function CheckOppCompatibility () {
 
     if (( failed > 0 )); then
         : "${failed} operator(s) failed compatibility check"
-        AppendCheck "opp_compatibility_matrix" "fail" "${details}"
+        appendCheck "opp_compatibility_matrix" "fail" "${details}"
         (( CHECKS_FAILED += 1 ))
     else
         : "All OPP operators are compatible with OCP ${ocpKey}"
-        AppendCheck "opp_compatibility_matrix" "pass" "${details}"
+        appendCheck "opp_compatibility_matrix" "pass" "${details}"
     fi
     true
 }
 
-function CheckClusterHealth () {
+function checkClusterHealth() {
     : "=== Check 3: Cluster health baseline ==="
 
-    typeset failed=0 details=""
+    typeset failed
+    failed=0
+    typeset details
+    details=""
 
     : "Checking node health..."
     typeset unreadyNodes
@@ -255,9 +280,11 @@ function CheckClusterHealth () {
     fi
 
     : "Checking ClusterVersion conditions..."
-    typeset avail progressing degraded
+    typeset avail
     avail="$(oc get clusterversion version -o jsonpath='{.status.conditions[?(@.type=="Available")].status}')" || true
+    typeset progressing
     progressing="$(oc get clusterversion version -o jsonpath='{.status.conditions[?(@.type=="Progressing")].status}')" || true
+    typeset degraded
     degraded="$(oc get clusterversion version -o jsonpath='{.status.conditions[?(@.type=="Degraded")].status}')" || true
     if [[ "${avail}" != "True" || ( -n "${progressing}" && "${progressing}" != "False" ) || ( -n "${degraded}" && "${degraded}" != "False" ) ]]; then
         : "CVO health check failed: Available=${avail} Progressing=${progressing} Degraded=${degraded}"
@@ -269,7 +296,7 @@ function CheckClusterHealth () {
     fi
 
     : "Checking for firing alerts..."
-    typeset firingAlerts=""
+    typeset firingAlerts
     if ! firingAlerts="$(oc -n openshift-monitoring exec -c prometheus prometheus-k8s-0 -- \
         curl -s 'http://localhost:9090/api/v1/alerts' | \
         python3 -c "
@@ -303,27 +330,30 @@ print('\n'.join(names))
 
     if (( failed > 0 )); then
         : "Cluster health baseline: ${failed} issue(s) found"
-        AppendCheck "cluster_health_baseline" "fail" "${details}"
+        appendCheck "cluster_health_baseline" "fail" "${details}"
         (( CHECKS_FAILED += 1 ))
     else
         : "Cluster health baseline: all checks passed"
-        AppendCheck "cluster_health_baseline" "pass" "${details}"
+        appendCheck "cluster_health_baseline" "pass" "${details}"
     fi
     true
 }
 
-function CheckMcpReadiness () {
+function checkMcpReadiness() {
     : "=== Check 4: MachineConfigPool readiness ==="
 
-    typeset failed=0 details=""
+    typeset failed
+    failed=0
+    typeset details
+    details=""
 
-    typeset mcpRaw=""
+    typeset mcpRaw
     if ! mcpRaw="$(oc get machineconfigpools --no-headers 2>&1)"; then
         : "Failed to query MachineConfigPools"
         details="machineconfigpools: query failed; "
         (( failed += 1 ))
     else
-        typeset mcpIssues=""
+        typeset mcpIssues
         mcpIssues="$(echo "${mcpRaw}" | \
             awk '$3 != "True" || $4 != "False" || $5 != "False" {print $1}')" || true
 
@@ -344,12 +374,15 @@ function CheckMcpReadiness () {
         fi
     fi
 
-    typeset mismatch=""
+    typeset mismatch
+    mismatch=""
     if [[ -n "${mcpRaw:-}" ]]; then
         while IFS= read -r line; do
-            typeset mcpName ready desired
+            typeset mcpName
             mcpName="$(echo "${line}" | awk '{print $1}')"
+            typeset ready
             ready="$(echo "${line}" | awk '{print $7}')"
+            typeset desired
             desired="$(echo "${line}" | awk '{print $6}')"
             if [[ -n "${ready}" && -n "${desired}" && "${ready}" != "${desired}" ]]; then
                 mismatch="${mismatch}${mcpName} (ready=${ready}, desired=${desired}); "
@@ -367,21 +400,22 @@ function CheckMcpReadiness () {
 
     if (( failed > 0 )); then
         : "MachineConfigPool readiness: ${failed} issue(s) found"
-        AppendCheck "mcp_readiness" "fail" "${details}"
+        appendCheck "mcp_readiness" "fail" "${details}"
         (( CHECKS_FAILED += 1 ))
     else
         : "MachineConfigPool readiness: all checks passed"
-        AppendCheck "mcp_readiness" "pass" "${details}"
+        appendCheck "mcp_readiness" "pass" "${details}"
     fi
     true
 }
 
-function Main () {
+function main() {
     if [[ -f "${SHARED_DIR}/kubeconfig" ]]; then
         export KUBECONFIG="${SHARED_DIR}/kubeconfig"
     fi
 
-    typeset target="${OPENSHIFT_UPGRADE_RELEASE_IMAGE_OVERRIDE:-}"
+    typeset target
+    target="${OPENSHIFT_UPGRADE_RELEASE_IMAGE_OVERRIDE:-}"
     if [[ -z "${target}" ]]; then
         : "OPENSHIFT_UPGRADE_RELEASE_IMAGE_OVERRIDE is not set; cannot determine upgrade target"
         exit 3
@@ -392,10 +426,13 @@ function Main () {
     KUBECONFIG="" oc registry login
     set -x
 
-    typeset targetVersion targetMajor targetMinor ocpXy
+    typeset targetVersion
     targetVersion="$(oc adm release info "${target}" -o jsonpath='{.metadata.version}')"
+    typeset targetMajor
     targetMajor="$(echo "${targetVersion}" | cut -f1 -d.)"
+    typeset targetMinor
     targetMinor="$(echo "${targetVersion}" | cut -f2 -d.)"
+    typeset ocpXy
     ocpXy="${targetMajor}.${targetMinor}"
     : "Target OCP version: ${targetVersion} (${ocpXy})"
 
@@ -405,7 +442,7 @@ function Main () {
 
     : "=== Starting OPP pre-flight validation ==="
 
-    InitReport
+    initReport
 
     python3 -c "
 import json, sys, time
@@ -419,10 +456,10 @@ with open(sys.argv[1], 'w') as f:
     json.dump(data, f, indent=2)
 " "${REPORT_FILE}" "${targetVersion}" "${sourceVersion}" "${target}"
 
-    CheckApiDeprecations "${targetMinor}" "${ocpXy}"
-    CheckOppCompatibility "${ocpXy}"
-    CheckClusterHealth
-    CheckMcpReadiness
+    checkApiDeprecations "${targetMinor}" "${ocpXy}"
+    checkOppCompatibility "${ocpXy}"
+    checkClusterHealth
+    checkMcpReadiness
 
     : "=== Pre-flight summary ==="
     python3 -m json.tool "${REPORT_FILE}"
@@ -437,4 +474,4 @@ with open(sys.argv[1], 'w') as f:
     true
 }
 
-Main "$@"
+main "$@"

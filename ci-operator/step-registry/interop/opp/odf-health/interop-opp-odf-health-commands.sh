@@ -1,5 +1,6 @@
 #!/bin/bash
-set -euxo pipefail; shopt -s inherit_errexit
+set -eux -o pipefail
+shopt -s inherit_errexit
 
 # ---------------------------------------------------------------------------
 # ODF Health Check (7-point gate)
@@ -7,20 +8,23 @@ set -euxo pipefail; shopt -s inherit_errexit
 # Validates that ODF is healthy and functional in the OPP interop cluster.
 # Replaces the former interop-tests-ocs-tests step which ran single-product
 # ODF acceptance tests unrelated to cross-product interop.
-#
 # Produces JUnit XML consumed by Prow / Sippy / TestGrid.
 # ---------------------------------------------------------------------------
 
-typeset ODF_NAMESPACE="${ODF_NAMESPACE:-openshift-storage}"
-typeset NOOBAA_S3_TIMEOUT="${NOOBAA_S3_TIMEOUT:-30}"
-typeset ODF_READY_TIMEOUT="${ODF_READY_TIMEOUT:-720}"
+typeset ODF_NAMESPACE
+ODF_NAMESPACE="${ODF_NAMESPACE:-openshift-storage}"
+typeset NOOBAA_S3_TIMEOUT
+NOOBAA_S3_TIMEOUT="${NOOBAA_S3_TIMEOUT:-30}"
+typeset ODF_READY_TIMEOUT
+ODF_READY_TIMEOUT="${ODF_READY_TIMEOUT:-720}"
 typeset -ri MAX_ODF_READY_TIMEOUT=780
 if (( ODF_READY_TIMEOUT > MAX_ODF_READY_TIMEOUT )); then
     printf '%s\n' "Warning: ODF_READY_TIMEOUT=${ODF_READY_TIMEOUT} exceeds maximum ${MAX_ODF_READY_TIMEOUT}s; clamping" >&2
     ODF_READY_TIMEOUT="${MAX_ODF_READY_TIMEOUT}"
 fi
 
-typeset junitFile="${ARTIFACT_DIR}/junit_odf_health.xml"
+typeset junitFile
+junitFile="${ARTIFACT_DIR}/junit_odf_health.xml"
 
 typeset -a tcNamesArr=()
 typeset -a tcResultsArr=()
@@ -100,12 +104,12 @@ function CollectExitArtifacts () {
     true
 }
 
-_propagate_junit () {
+PropagateJunit () {
     mkdir -p "${SHARED_DIR}/junit"
     find "${ARTIFACT_DIR}" -name '*.xml' -exec cp {} "${SHARED_DIR}/junit/" \; 2>/dev/null || true
 }
 
-trap '{( CollectExitArtifacts; _propagate_junit; true )}' EXIT
+trap '{( CollectExitArtifacts; PropagateJunit; true )}' EXIT
 
 # ---------------------------------------------------------------------------
 # Check 1: ODF Operator CSV in Succeeded phase
@@ -114,15 +118,15 @@ trap '{( CollectExitArtifacts; _propagate_junit; true )}' EXIT
 function CheckOdfCsv () {
     : "=== Check 1: ODF Operator CSV ==="
 
-    typeset csvPhase=""
-    if ! csvPhase="$(oc get csv -n "${ODF_NAMESPACE}" -o json | python3 -c "
+    typeset csvPhase
+    csvPhase="$(oc get csv -n "${ODF_NAMESPACE}" -o json | python3 -c "
 import sys,json,re; d=json.load(sys.stdin)
 m=[i for i in d.get('items',[]) if re.match(r'^(odf-operator|ocs-operator)',i['metadata']['name'])]
 print((m[0].get('status',{}).get('phase','NotFound')) if m else 'NotFound')
-")"; then
+")" || {
         AddResult "odf-csv-phase" "fail" "Failed to query ODF CSVs in ${ODF_NAMESPACE}"
         return
-    fi
+    }
 
     if [[ "${csvPhase}" == "Succeeded" ]]; then
         : "PASS: ODF CSV phase=Succeeded"
@@ -142,14 +146,14 @@ print((m[0].get('status',{}).get('phase','NotFound')) if m else 'NotFound')
 function CheckStorageCluster () {
     : "=== Check 2: StorageCluster Ready ==="
 
-    typeset scPhase=""
-    if ! scPhase="$(oc get storagecluster -n "${ODF_NAMESPACE}" -o json | python3 -c "
+    typeset scPhase
+    scPhase="$(oc get storagecluster -n "${ODF_NAMESPACE}" -o json | python3 -c "
 import sys,json; d=json.load(sys.stdin)
 print(d['items'][0]['status'].get('phase','NotFound') if d.get('items') else 'NotFound')
-")"; then
+")" || {
         AddResult "storagecluster-ready" "fail" "Failed to query StorageCluster"
         return
-    fi
+    }
 
     if [[ "${scPhase}" == "Ready" ]]; then
         : "PASS: StorageCluster phase=Ready"
@@ -169,14 +173,14 @@ print(d['items'][0]['status'].get('phase','NotFound') if d.get('items') else 'No
 function CheckCephCluster () {
     : "=== Check 3: CephCluster health ==="
 
-    typeset cephHealth=""
-    if ! cephHealth="$(oc get cephcluster -n "${ODF_NAMESPACE}" -o json | python3 -c "
+    typeset cephHealth
+    cephHealth="$(oc get cephcluster -n "${ODF_NAMESPACE}" -o json | python3 -c "
 import sys,json; d=json.load(sys.stdin)
 print(d['items'][0].get('status',{}).get('ceph',{}).get('health','NotFound') if d.get('items') else 'NotFound')
-")"; then
+")" || {
         AddResult "cephcluster-health" "fail" "Failed to query CephCluster"
         return
-    fi
+    }
 
     if [[ "${cephHealth}" == "HEALTH_OK" || "${cephHealth}" == "HEALTH_WARN" ]]; then
         : "PASS: CephCluster health=${cephHealth}"
@@ -234,7 +238,7 @@ function CheckPvcProvision () {
         typeset accessMode="${scModes[$idx]}"
         typeset testId="pvc-provision-${scName##*-}"
         typeset pvcName="odf-health-${scName##*-}-${RANDOM}"
-        typeset pvcYaml=""
+        typeset pvcYaml
         pvcYaml=$(cat <<EOF
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -258,7 +262,7 @@ EOF
 
         typeset -i maxWait=60
         typeset -i elapsed=0
-        typeset phase=""
+        typeset phase
         while (( elapsed < maxWait )); do
             phase="$(oc get pvc "${pvcName}" -n "${ODF_NAMESPACE}" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")"
             if [[ "${phase}" == "Bound" ]]; then
@@ -287,14 +291,14 @@ EOF
 function CheckNoobaa () {
     : "=== Check 6: NooBaa S3 functional ==="
 
-    typeset nbPhase=""
-    if ! nbPhase="$(oc get noobaa -n "${ODF_NAMESPACE}" -o json | python3 -c "
+    typeset nbPhase
+    nbPhase="$(oc get noobaa -n "${ODF_NAMESPACE}" -o json | python3 -c "
 import sys,json; d=json.load(sys.stdin)
 print(d['items'][0]['status'].get('phase','NotFound') if d.get('items') else 'NotFound')
-")"; then
+")" || {
         AddResult "noobaa-s3-functional" "fail" "Failed to query NooBaa"
         return
-    fi
+    }
 
     if [[ "${nbPhase}" == "NotFound" ]]; then
         AddResult "noobaa-s3-functional" "fail" "No NooBaa system found in ${ODF_NAMESPACE}"
@@ -309,7 +313,7 @@ print(d['items'][0]['status'].get('phase','NotFound') if d.get('items') else 'No
     : "NooBaa phase=Ready, creating OBC for S3 functional check..."
 
     typeset obcName="odf-health-obc-${RANDOM}"
-    typeset obcYaml=""
+    typeset obcYaml
     obcYaml=$(cat <<EOF
 apiVersion: objectbucket.io/v1alpha1
 kind: ObjectBucketClaim
@@ -329,7 +333,7 @@ EOF
 
     typeset -i maxWait=60
     typeset -i elapsed=0
-    typeset obcPhase=""
+    typeset obcPhase
     while (( elapsed < maxWait )); do
         obcPhase="$(oc get obc "${obcName}" -n "${ODF_NAMESPACE}" -o jsonpath='{.status.phase}' 2>/dev/null || echo "")"
         if [[ "${obcPhase}" == "Bound" ]]; then
@@ -345,20 +349,20 @@ EOF
         return
     fi
 
-    typeset bucketName=""
+    typeset bucketName
     bucketName="$(oc get obc "${obcName}" -n "${ODF_NAMESPACE}" -o jsonpath='{.spec.bucketName}' 2>/dev/null)" || true
     if [[ -z "${bucketName}" ]]; then
         oc delete obc "${obcName}" -n "${ODF_NAMESPACE}" --ignore-not-found=true --wait=false 2>/dev/null || true
         AddResult "noobaa-s3-functional" "fail" "OBC bound but bucket name is empty"
         return
     fi
-    typeset secretRef=""
+    typeset secretRef
     secretRef="$(oc get obc "${obcName}" -n "${ODF_NAMESPACE}" -o jsonpath='{.spec.secretName}' 2>/dev/null)"
     if [[ -z "${secretRef}" ]]; then
         secretRef="${obcName}"
     fi
 
-    typeset s3Endpoint=""
+    typeset s3Endpoint
     s3Endpoint="$(oc get noobaa -n "${ODF_NAMESPACE}" -o json | python3 -c "
 import sys,json; d=json.load(sys.stdin)
 v=d['items'][0].get('status',{}).get('services',{}).get('serviceS3',{}).get('internalDNS',[])
@@ -369,11 +373,11 @@ print(v[0] if v else '')
     fi
 
     typeset testKey="health-check-${RANDOM}"
-    typeset testData=""
+    typeset testData
     testData="odf-health-$(date +%s)"
 
     typeset podName="odf-health-s3-check-${RANDOM}"
-    typeset podManifest=""
+    typeset podManifest
     podManifest=$(cat <<EOF
 apiVersion: v1
 kind: Pod
@@ -430,13 +434,18 @@ spec:
 EOF
 )
 
-    typeset s3Result=""
+    typeset s3Result
+    s3Result=''
     typeset -i podWait=$(( NOOBAA_S3_TIMEOUT + 60 ))
-    typeset xtrace=""
-    [[ "$-" == *x* ]] && xtrace="set -x" || xtrace="set +x"
+    typeset xtrace
+    if [[ "$-" == *x* ]]; then
+        xtrace='set -x'
+    else
+        xtrace='set +x'
+    fi
     set +x
     if echo "${podManifest}" | oc apply -f -; then
-        ${xtrace}
+        eval "${xtrace}"
         if ! oc wait pod "${podName}" -n "${ODF_NAMESPACE}" \
             --for=jsonpath='{.status.phase}'=Succeeded \
             --timeout="${podWait}s" 2>/dev/null; then
@@ -446,7 +455,7 @@ EOF
         fi
         s3Result="$(oc logs "${podName}" -n "${ODF_NAMESPACE}" 2>/dev/null || echo "")"
     else
-        ${xtrace}
+        eval "${xtrace}"
     fi
 
     oc delete pod "${podName}" -n "${ODF_NAMESPACE}" --ignore-not-found=true --wait=false 2>/dev/null || true
@@ -456,7 +465,8 @@ EOF
         : "PASS: NooBaa S3 put/get/delete cycle succeeded"
         AddResult "noobaa-s3-functional" "pass"
     else
-        typeset s3Msg="NooBaa S3 functional check failed"
+        typeset s3Msg
+        s3Msg="NooBaa S3 functional check failed"
         if echo "${s3Result}" | grep -q "S3_CHECK_FAIL"; then
             s3Msg="NooBaa S3: $(echo "${s3Result}" | grep "S3_CHECK_FAIL")"
         fi
@@ -472,18 +482,18 @@ EOF
 function CheckCephHealth () {
     : "=== Check 7: Ceph health detail ==="
 
-    typeset cephDetail=""
-    if ! cephDetail="$(oc get cephcluster -n "${ODF_NAMESPACE}" -o json | python3 -c "
+    typeset cephDetail
+    cephDetail="$(oc get cephcluster -n "${ODF_NAMESPACE}" -o json | python3 -c "
 import sys,json; d=json.load(sys.stdin)
 details=d['items'][0].get('status',{}).get('ceph',{}).get('details',{}) if d.get('items') else {}
 for k,v in details.items():
  if v.get('severity')!='HEALTH_OK': print(f\"{k}: {v.get('message','unknown')}\")
-")"; then
+")" || {
         AddResult "ceph-health-detail" "fail" "Failed to query CephCluster details"
         return
-    fi
+    }
 
-    typeset cephHealth=""
+    typeset cephHealth
     cephHealth="$(oc get cephcluster -n "${ODF_NAMESPACE}" -o json | python3 -c "
 import sys,json; d=json.load(sys.stdin)
 print(d['items'][0].get('status',{}).get('ceph',{}).get('health','unknown') if d.get('items') else 'unknown')
@@ -512,7 +522,8 @@ function WaitForOdfReady () {
 
     : "Waiting up to ${timeout}s for StorageCluster and NooBaa to reach Ready..."
 
-    typeset scPhase="" nbPhase=""
+    typeset scPhase
+    typeset nbPhase
     while (( SECONDS < deadline )); do
         typeset -i remaining=$(( deadline - SECONDS ))
         (( remaining < 1 )) && remaining=1
@@ -560,7 +571,7 @@ function CheckOdfInstalled () {
     if ! oc get namespace "${ODF_NAMESPACE}" >/dev/null 2>&1; then
         return 1
     fi
-    typeset csvJson=""
+    typeset csvJson
     typeset -i ocExit=0
     csvJson="$(oc get csv -n "${ODF_NAMESPACE}" -o json 2>/dev/null)" || ocExit=$?
     if (( ocExit != 0 )); then
@@ -571,14 +582,14 @@ function CheckOdfInstalled () {
         printf '%s\n' "Error: oc get csv returned empty output in ${ODF_NAMESPACE}" >&2
         return 2
     fi
-    typeset csvCount=""
-    if ! csvCount="$(printf '%s' "${csvJson}" | python3 -c "
+    typeset csvCount
+    csvCount="$(printf '%s' "${csvJson}" | python3 -c "
 import sys,json,re; d=json.load(sys.stdin)
 print(len([i for i in d.get('items',[]) if re.match(r'^(odf-operator|ocs-operator)',i['metadata']['name'])]))
-")"; then
+")" || {
         printf '%s\n' "Error: failed to parse CSV JSON from ${ODF_NAMESPACE}" >&2
         return 2
-    fi
+    }
     if [[ "${csvCount}" -gt 0 ]]; then
         return 0
     fi
@@ -605,7 +616,7 @@ function Main () {
         typeset -a checkNames=("odf-csv-phase" "storagecluster-ready" "cephcluster-health"
             "storageclasses-available" "pvc-provision-rbd" "pvc-provision-cephfs"
             "noobaa-s3-functional" "ceph-health-detail")
-        typeset name=""
+        typeset name
         for name in "${checkNames[@]}"; do
             AddResult "${name}" "skip" "${skipMsg}"
         done
@@ -629,7 +640,7 @@ function Main () {
     WriteJunit
 
     typeset -i hasAnyFail=0
-    typeset r=""
+    typeset r
     for r in "${tcResultsArr[@]}"; do
         if [[ "${r}" == "fail" ]]; then
             hasAnyFail=1

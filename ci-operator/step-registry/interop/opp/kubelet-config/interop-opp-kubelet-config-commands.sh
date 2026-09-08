@@ -20,18 +20,19 @@
 # The CI cluster is ephemeral -- lowering thresholds is safe here.
 # ---------------------------------------------------------------------------
 
-set -euo pipefail
+set -eux -o pipefail
+shopt -s inherit_errexit
 
 if [[ -f "${SHARED_DIR}/kubeconfig" ]]; then
     export KUBECONFIG="${SHARED_DIR}/kubeconfig"
 fi
 
-MCP_TIMEOUT="${MCP_TIMEOUT:-1200}"
+MCP_TIMEOUT=${MCP_TIMEOUT:-1200}
 
 echo "=== OPP Kubelet Eviction Threshold Tuning ==="
 
 # Check if a KubeletConfig with this name already exists
-if oc get kubeletconfig opp-ephemeral-threshold -o name 2>/dev/null; then
+if oc get kubeletconfig opp-ephemeral-threshold -o name &>/dev/null; then
     echo "KubeletConfig opp-ephemeral-threshold already exists -- skipping apply"
 else
     echo "Applying KubeletConfig to lower ephemeral-storage eviction thresholds..."
@@ -75,11 +76,11 @@ if oc wait machineconfigpool worker \
 else
     echo "WARNING: Worker MCP did not reach Updated=True within ${MCP_TIMEOUT}s"
     echo "Current MCP state:"
-    oc get mcp -o wide 2>/dev/null || true
+    oc get mcp -o wide &>/dev/null
     # Do not fail the step -- downstream wait-mcp will catch lingering issues
 fi
 
 echo ""
 echo "Final MCP state:"
-oc get mcp -o wide 2>/dev/null || true
+oc get mcp -o wide &>/dev/null
 echo "=== Kubelet config tuning complete ==="
