@@ -1,9 +1,10 @@
 #!/bin/bash
 set -euxo pipefail; shopt -s inherit_errexit
 
-_propagate_junit () {
+function _propagate_junit () {
     mkdir -p "${SHARED_DIR}/junit"
-    find "${ARTIFACT_DIR}" -name '*.xml' -exec cp {} "${SHARED_DIR}/junit/" \; 2>/dev/null || true
+    find "${ARTIFACT_DIR}" -name '*.xml' -exec cp {} "${SHARED_DIR}/junit/" \; 2>/dev/null
+    true
 }
 trap _propagate_junit EXIT
 
@@ -15,6 +16,7 @@ echo "[smoke] Reading connection details from SHARED_DIR..."
 
 typeset centralUrl=''
 centralUrl="$(cat "${SHARED_DIR}/CENTRAL_URL")"
+typeset ROX_ADMIN_PASSWORD=''
 ROX_ADMIN_PASSWORD="$(cat "${SHARED_DIR}/ROX_ADMIN_PASSWORD")"
 
 echo "[smoke] Connection details loaded from SHARED_DIR"
@@ -43,7 +45,8 @@ cd /tmp/stackrox/qa-tests-backend/src/main/proto
 typeset target=''
 for link in api internalapi storage test tools; do
     if [[ -L "${link}" ]]; then
-        target=$(readlink -f "${link}")
+        target=''
+        target="$(readlink -f "${link}")"
         rm "${link}"
         cp -r "${target}" "${link}"
     fi
@@ -91,6 +94,7 @@ INIT
 
 echo "[smoke] Running testSMOKE..."
 typeset -i testExit=0
+testExit=0
 ./gradlew testSMOKE --no-daemon --init-script /tmp/fix-proto-deps.gradle \
     -Dorg.gradle.jvmargs="-Xmx2g" || testExit=$?
 
@@ -107,3 +111,4 @@ fi
 
 echo "[smoke] Test run finished with exit code: ${testExit}"
 exit "${testExit}"
+true

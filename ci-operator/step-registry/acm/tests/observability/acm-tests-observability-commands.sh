@@ -1,24 +1,25 @@
 #!/bin/bash
 set -euxo pipefail; shopt -s inherit_errexit
 
-_propagate_junit () {
+function _propagate_junit () {
     mkdir -p "${SHARED_DIR}/junit"
-    find "${ARTIFACT_DIR}" -name '*.xml' -exec cp {} "${SHARED_DIR}/junit/" \; 2>/dev/null || true
+    find "${ARTIFACT_DIR}" -name '*.xml' -exec cp {} "${SHARED_DIR}/junit/" \; 2>/dev/null
 }
 trap _propagate_junit EXIT
 
 if [ "${MAP_TESTS}" = "true" ]; then
     eval "$(
-        typeset -a _fURL=()
-        type -t wget 1>/dev/null && _fURL=(wget --timeout=30 -qO-) || _fURL=(curl --connect-timeout 10 --max-time 30 -fsSL)
-        "${_fURL[@]}" \
+        typeset -a fURL=()
+        type -t wget 1>/dev/null && fURL=(wget --timeout=30 -qO-) || fURL=(curl --connect-timeout 10 --max-time 30 -fsSL)
+        "${fURL[@]}" \
             https://raw.githubusercontent.com/RedHatQE/OpenShift-LP-QE--Tools/refs/heads/main/libs/bash/ci-operator/interop/common/ExitTrap--PostProcessPrep.sh
     )"
     if type -t ExitTrap--PostProcessPrep 1>/dev/null; then
-        trap '
+        trap '{(
             LP_IO__ET_PPP__NEW_TS_NAME="${DR__RP__CR_COMP_NAME}--%s" \
-                ExitTrap--PostProcessPrep junit--acm-observability.xml
-        ' EXIT
+            ExitTrap--PostProcessPrep junit--acm-observability.xml
+            true
+        )}' EXIT
     else
         : "WARNING: ExitTrap--PostProcessPrep not available, skipping junit remapping"
     fi
@@ -28,12 +29,12 @@ fi
 typeset secretsDir="/tmp/secrets"
 
 # Get the creds from ACMQE CI vault and run the automation on pre-exisiting HUB
-SKIP_OCP_DEPLOY="false"
-if [[ $SKIP_OCP_DEPLOY == "true" ]]; then
-    echo "------------ Skipping OCP Deploy = $SKIP_OCP_DEPLOY ------------"
-    cp ${secretsDir}/ci/kubeconfig $SHARED_DIR/kubeconfig
-    cp ${secretsDir}/ci/kubeadmin-password $SHARED_DIR/kubeadmin-password
-    cp ${secretsDir}/ci/metadata $SHARED_DIR/metadata.json
+typeset SKIP_OCP_DEPLOY="false"
+if [[ "${SKIP_OCP_DEPLOY}" == "true" ]]; then
+    echo "------------ Skipping OCP Deploy = ${SKIP_OCP_DEPLOY} ------------"
+    cp "${secretsDir}/ci/kubeconfig" "${SHARED_DIR}/kubeconfig"
+    cp "${secretsDir}/ci/kubeadmin-password" "${SHARED_DIR}/kubeadmin-password"
+    cp "${secretsDir}/ci/metadata" "${SHARED_DIR}/metadata.json"
 fi 
 
 : Copy kubeconfig to default location for kubectl/oc
@@ -47,16 +48,16 @@ fi
 
 # Credentials loaded with set +x to prevent exposure in CI logs
 set +x
-export PARAM_AWS_SECRET_ACCESS_KEY=
+export PARAM_AWS_SECRET_ACCESS_KEY
 PARAM_AWS_SECRET_ACCESS_KEY="$(cat "${secretsDir}/obs/aws-secret-access-key")"
 
-export PARAM_AWS_ACCESS_KEY_ID=
+export PARAM_AWS_ACCESS_KEY_ID
 PARAM_AWS_ACCESS_KEY_ID="$(cat "${secretsDir}/obs/aws-access-key-id")"
 
-export OC_HUB_CLUSTER_PASS=
+export OC_HUB_CLUSTER_PASS
 OC_HUB_CLUSTER_PASS="$(cat "${SHARED_DIR}/kubeadmin-password")"
 
-export MANAGED_CLUSTER_PASS=
+export MANAGED_CLUSTER_PASS
 MANAGED_CLUSTER_PASS="$(cat "${SHARED_DIR}/managed.cluster.password" 2>/dev/null || true)"
 set -x
 
@@ -79,8 +80,8 @@ if [[ -f /tmp/acm-policy-subscription-backup.yaml ]]; then
 fi
 
 : Copy the test cases results to an external directory
-cp -r tests/pkg/tests $ARTIFACT_DIR/
+cp -r tests/pkg/tests "${ARTIFACT_DIR}/"
 
-mv $ARTIFACT_DIR/tests/results.xml $ARTIFACT_DIR/tests/junit_results.xml
+mv "${ARTIFACT_DIR}/tests/results.xml" "${ARTIFACT_DIR}/tests/junit_results.xml"
 
 true

@@ -77,9 +77,9 @@ EOF
     true
 }
 
-_propagate_junit () {
+function _propagate_junit () {
     mkdir -p "${SHARED_DIR}/junit"
-    find "${ARTIFACT_DIR}" -name '*.xml' -exec cp {} "${SHARED_DIR}/junit/" \; 2>/dev/null || true
+    find "${ARTIFACT_DIR}" -name '*.xml' -exec cp {} "${SHARED_DIR}/junit/" \; 2>/dev/null
 }
 
 trap '{( GenerateJunit; _propagate_junit; true )}' EXIT
@@ -152,8 +152,8 @@ function GetQuayAuth () {
     fi
 
     typeset initPassword=''
-    initPassword=$(python3 -c "import secrets,string; print(''.join(secrets.choice(string.ascii_letters+string.digits) for _ in range(20)))")
     typeset initResult=''
+    initPassword=$(python3 -c "import secrets,string; print(''.join(secrets.choice(string.ascii_letters+string.digits) for _ in range(20)))")
     initResult=$(curl -sk --connect-timeout 15 --max-time 60 -X POST "https://${QUAY_HOST}/api/v1/user/initialize" \
         -H "Content-Type: application/json" \
         -d "{\"username\":\"quayadmin\",\"password\":\"${initPassword}\",\"email\":\"quayadmin@example.com\",\"access_token\":true}" 2>/dev/null) || initResult=""
@@ -363,7 +363,12 @@ data = json.load(sys.stdin)
 items = [i for i in data.get('items', []) if 'quay' in i['metadata'].get('name','').lower()]
 unbound = [i['metadata']['name'] for i in items if i.get('status', {}).get('phase') != 'Bound']
 print(' '.join(unbound))
-") || { elapsed=$(( $(date +%s) - start )); RecordResult "${testName}" "failed" "PVC filter script error" "${elapsed}"; return 1; }
+")
+    if [[ $? -ne 0 ]]; then
+        elapsed=$(( $(date +%s) - start ))
+        RecordResult "${testName}" "failed" "PVC filter script error" "${elapsed}"
+        return 1
+    fi
 
     if [[ -n "${unboundPvcs}" ]]; then
         elapsed=$(( $(date +%s) - start ))

@@ -1,9 +1,9 @@
 #!/bin/bash
 set -euxo pipefail; shopt -s inherit_errexit
 
-_propagate_junit () {
+function _propagate_junit () {
     mkdir -p "${SHARED_DIR}/junit"
-    find "${ARTIFACT_DIR}" -name '*.xml' -exec cp {} "${SHARED_DIR}/junit/" \; 2>/dev/null || true
+    find "${ARTIFACT_DIR}" -name '*.xml' -exec cp {} "${SHARED_DIR}/junit/" \; 2>/dev/null
 }
 trap _propagate_junit EXIT
 
@@ -26,6 +26,7 @@ if [[ -f "${awsCredFile}" ]]; then
     set +x
     awsAccKeyID="$(sed -nE 's/^\s*aws_access_key_id\s*=\s*//p;T;q' "${awsCredFile}")"
     awsAccKeyToken="$(sed -nE 's/^\s*aws_secret_access_key\s*=\s*//p;T;q' "${awsCredFile}")"
+    set -x
 
     if [[ -z "${awsAccKeyID}" ]] || [[ -z "${awsAccKeyToken}" ]]; then
         echo "ERROR: Failed to extract AWS credentials from ${awsCredFile}" 1>&2
@@ -44,7 +45,6 @@ if [[ -f "${awsCredFile}" ]]; then
         ' |
     yq -p json -o yaml eval . > "${optionFile}.tmp"
     mv -f "${optionFile}.tmp" "${optionFile}"
-    set -x
 
     unset awsAccKeyID awsAccKeyToken
 fi
@@ -62,6 +62,7 @@ typeset cypressOcpVersion=''
 cypressOcpVersion="$(cat "${secretsDir}/clc/ocp_image_version")"
 typeset cloudProviders=''
 cloudProviders="$(cat "${secretsDir}/clc/ocp_cloud_providers")"
+set -x
 
 if [[ -z "${cypressBaseUrl}" ]] || [[ -z "${cypressHubApiUrl}" ]]; then
     echo "ERROR: Console URL or API URL is empty; oc whoami returned no usable value" 1>&2
@@ -69,13 +70,11 @@ if [[ -z "${cypressBaseUrl}" ]] || [[ -z "${cypressHubApiUrl}" ]]; then
 fi
 
 typeset clcStatus=0
-
 CYPRESS_BASE_URL="${cypressBaseUrl}" \
 CYPRESS_HUB_API_URL="${cypressHubApiUrl}" \
 CYPRESS_CLC_OCP_IMAGE_VERSION="${cypressOcpVersion}" \
 CLOUD_PROVIDERS="${cloudProviders}" \
 bash +x ./execute_clc_interop_commands.sh || clcStatus=$?
-set -x
 
 unset CYPRESS_OPTIONS_HUB_PASSWORD
 
@@ -85,3 +84,4 @@ if (( clcStatus != 0 )); then
     exit "${clcStatus}"
 fi
 exit "${reportStatus}"
+true

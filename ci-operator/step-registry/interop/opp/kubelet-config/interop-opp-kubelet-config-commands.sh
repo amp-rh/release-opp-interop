@@ -20,13 +20,14 @@
 # The CI cluster is ephemeral -- lowering thresholds is safe here.
 # ---------------------------------------------------------------------------
 
-set -euo pipefail
+set -euxo pipefail; shopt -s inherit_errexit
 
 if [[ -f "${SHARED_DIR}/kubeconfig" ]]; then
     export KUBECONFIG="${SHARED_DIR}/kubeconfig"
 fi
 
-MCP_TIMEOUT="${MCP_TIMEOUT:-1200}"
+typeset mcpTimeout=''
+mcpTimeout="${MCP_TIMEOUT:-1200}"
 
 echo "=== OPP Kubelet Eviction Threshold Tuning ==="
 
@@ -62,7 +63,7 @@ fi
 # Wait for the worker MCP to finish updating
 # -----------------------------------------------------------------------
 echo ""
-echo "Waiting up to ${MCP_TIMEOUT}s for worker MCP to finish updating..."
+echo "Waiting up to "${mcpTimeout}"s for worker MCP to finish updating..."
 
 # Give the MCO a moment to render the new MachineConfig
 sleep 30
@@ -70,10 +71,10 @@ sleep 30
 # Wait for the MCP to pick up the change (Updating=True, then back to Updated=True)
 if oc wait machineconfigpool worker \
     --for=condition=Updated=True \
-    --timeout="${MCP_TIMEOUT}s" 2>&1; then
+    --timeout="${mcpTimeout}s" 2>&1; then
     echo "Worker MCP rollout complete"
 else
-    echo "WARNING: Worker MCP did not reach Updated=True within ${MCP_TIMEOUT}s"
+    echo "WARNING: Worker MCP did not reach Updated=True within ${mcpTimeout}s"
     echo "Current MCP state:"
     oc get mcp -o wide 2>/dev/null || true
     # Do not fail the step -- downstream wait-mcp will catch lingering issues
@@ -83,3 +84,4 @@ echo ""
 echo "Final MCP state:"
 oc get mcp -o wide 2>/dev/null || true
 echo "=== Kubelet config tuning complete ==="
+true

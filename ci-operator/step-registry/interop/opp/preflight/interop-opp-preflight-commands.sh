@@ -87,7 +87,12 @@ EOFJSON
 }
 
 function AppendCheck () {
-    typeset checkName="${1}" checkStatus="${2}" checkDetails="${3}"
+    typeset checkName=''
+    typeset checkStatus=''
+    typeset checkDetails=''
+    checkName="${1}"
+    checkStatus="${2}"
+    checkDetails="${3}"
     python3 -c "
 import json, sys
 with open(sys.argv[1]) as f:
@@ -102,12 +107,17 @@ with open(sys.argv[1], 'w') as f:
 function CheckApiDeprecations () {
     : "=== Check 1: API deprecation scan ==="
 
-    typeset targetMinor="${1}"
-    typeset ocpDisplay="${2:-4.${targetMinor}}"
-    typeset targetMajor="${ocpDisplay%%.*}"
-    typeset flagged="" foundCount=0
+    typeset targetMinor=''
+    typeset ocpDisplay=''
+    typeset targetMajor=''
+    typeset flagged=''
+    typeset foundCount=0
+    targetMinor="${1}"
+    ocpDisplay="${2:-4.${targetMinor}}"
+    targetMajor="${ocpDisplay%%.*}"
+    flagged=''
 
-    typeset clusterApis
+    typeset clusterApis=''
     clusterApis="$(oc api-resources --no-headers)" || {
         : "WARNING: Failed to list API resources"
         AppendCheck "api_deprecation_scan" "warn" "Could not list cluster API resources"
@@ -117,17 +127,18 @@ function CheckApiDeprecations () {
     for minor in "${!REMOVED_APIS[@]}"; do
         if (( targetMajor > 4 || minor <= targetMinor )); then
             for apiEntry in ${REMOVED_APIS[${minor}]}; do
-                typeset apiVersion apiKind
+                typeset apiVersion=''
+                typeset apiKind=''
                 apiKind="${apiEntry##*/}"
                 apiVersion="${apiEntry%/*}"
 
-                if echo "${clusterApis}" | grep -qw "${apiKind}" && \
-                   oc api-resources --api-group="${apiVersion%%/*}" 2>/dev/null | grep -q "${apiVersion#*/}"; then
-                    typeset oppUsage
+                if echo "${clusterApis}" | sed -e '/\b'"${apiKind}"'\b/!d' >/dev/null && \
+                   oc api-resources --api-group="${apiVersion%%/*}" 2>/dev/null | sed -e '/'"${apiVersion#*/}"'/!d' >/dev/null; then
+                    typeset oppUsage=''
                     oppUsage="$(oc get "${apiKind}" -A --no-headers 2>/dev/null | head -5)" || true
                     if [[ -n "${oppUsage}" ]]; then
                         flagged="${flagged}  - ${apiVersion}/${apiKind} (removed in ${targetMajor}.${minor})\n"
-                        (( foundCount += 1 ))
+                        (( ++foundCount ))
                     fi
                 fi
             done
@@ -148,11 +159,12 @@ function CheckApiDeprecations () {
 function CheckOppCompatibility () {
     : "=== Check 2: OPP operator compatibility matrix ==="
 
-    typeset ocpKey="${1}"
-    typeset compatSpec="${OPP_COMPAT[${ocpKey}]:-}"
-    typeset allCsvs
+    typeset ocpKey=''
+    typeset compatSpec=''
+    typeset allCsvs=''
     typeset failed=0
-
+    ocpKey="${1}"
+    compatSpec="${OPP_COMPAT[${ocpKey}]:-}"
     allCsvs="$(oc get csv -A --no-headers)" || {
         : "Failed to retrieve CSVs"
         AppendCheck "opp_compatibility_matrix" "fail" "Could not list CSVs"
@@ -166,40 +178,46 @@ function CheckOppCompatibility () {
         return 0
     fi
 
-    typeset details=""
+    typeset details=''
     for entry in ${compatSpec}; do
-        typeset opPrefix="${entry%%:*}"
-        typeset minVersion="${entry##*:}"
-        typeset minMajor minMinor
+        typeset opPrefix=''
+        typeset minVersion=''
+        typeset minMajor=''
+        typeset minMinor=''
+        opPrefix="${entry%%:*}"
+        minVersion="${entry##*:}"
         minMajor="${minVersion%%.*}"
         minMinor="${minVersion##*.}"
 
-        typeset csvLine csvName installedVersion
-        csvLine="$(echo "${allCsvs}" | grep "${opPrefix}" | head -1)" || true
+        typeset csvLine=''
+        typeset csvName=''
+        typeset installedVersion=''
+        csvLine="$(echo "${allCsvs}" | sed -e '/'"${opPrefix}"'/!d' | head -1)" || true
         if [[ -z "${csvLine}" ]]; then
             : "Operator not found: ${opPrefix}"
             details="${details}${opPrefix}: NOT INSTALLED; "
-            (( failed += 1 ))
+            (( ++failed ))
             continue
         fi
 
         csvName="$(echo "${csvLine}" | awk '{print $2}')"
-        installedVersion="$(echo "${csvName}" | grep -oE '[0-9]+\.[0-9]+' | head -1)" || true
+        installedVersion="$(echo "${csvName}" | sed -En 's/.*([0-9]+\.[0-9]+).*/\1/p' | head -1)" || true
         if [[ -z "${installedVersion}" ]]; then
             : "Operator ${opPrefix}: could not parse version from CSV ${csvName}"
             details="${details}${opPrefix}: version unparseable from ${csvName}; "
-            (( failed += 1 ))
+            (( ++failed ))
             continue
         fi
 
-        typeset instMajor instMinor
+        typeset instMajor=''
+        typeset instMinor=''
         instMajor="${installedVersion%%.*}"
         instMinor="${installedVersion##*.}"
 
         if (( instMajor < minMajor || (instMajor == minMajor && instMinor < minMinor) )); then
             : "Operator ${opPrefix} version ${installedVersion} is below minimum ${minVersion} for OCP ${ocpKey}"
             details="${details}${opPrefix}: ${installedVersion} < ${minVersion} (INCOMPATIBLE); "
-            (( failed += 1 ))
+            (( ++failed ))
         else
             : "Operator ${opPrefix}: version ${installedVersion} >= ${minVersion} (OK)"
             details="${details}${opPrefix}: ${installedVersion} >= ${minVersion} (OK); "
@@ -220,56 +238,59 @@ function CheckOppCompatibility () {
 function CheckClusterHealth () {
     : "=== Check 3: Cluster health baseline ==="
 
-    typeset failed=0 details=""
+    typeset failed=0
+    typeset details=''
 
     : "Checking node health..."
-    typeset unreadyNodes
+    typeset unreadyNodes=''
     if ! unreadyNodes="$(oc get node --no-headers | awk '$2 != "Ready" {print $1}')"; then
         : "Failed to query nodes"
         details="${details}nodes: query failed; "
-        (( failed += 1 ))
+        (( ++failed ))
     elif [[ -n "${unreadyNodes}" ]]; then
         : "Not-Ready nodes: ${unreadyNodes}"
         details="${details}unready_nodes: ${unreadyNodes}; "
-        (( failed += 1 ))
+        (( ++failed ))
     else
-        typeset nodeCount
+        typeset nodeCount=''
         nodeCount="$(oc get node --no-headers | wc -l)"
         : "All ${nodeCount} nodes Ready"
         details="${details}nodes: all ${nodeCount} ready; "
     fi
 
     : "Checking ClusterOperator health..."
-    typeset unhealthyCo
+    typeset unhealthyCo=''
     if ! unhealthyCo="$(oc get co --no-headers | awk '$3 != "True" || $4 != "False" || $5 != "False" {print $1}')"; then
         : "Failed to query ClusterOperators"
         details="${details}cluster_operators: query failed; "
-        (( failed += 1 ))
+        (( ++failed ))
     elif [[ -n "${unhealthyCo}" ]]; then
         : "Unhealthy ClusterOperators: ${unhealthyCo}"
         details="${details}unhealthy_co: ${unhealthyCo}; "
-        (( failed += 1 ))
+        (( ++failed ))
     else
         : "All ClusterOperators healthy"
         details="${details}cluster_operators: all healthy; "
     fi
 
     : "Checking ClusterVersion conditions..."
-    typeset avail progressing degraded
+    typeset avail=''
+    typeset progressing=''
+    typeset degraded=''
     avail="$(oc get clusterversion version -o jsonpath='{.status.conditions[?(@.type=="Available")].status}')" || true
     progressing="$(oc get clusterversion version -o jsonpath='{.status.conditions[?(@.type=="Progressing")].status}')" || true
     degraded="$(oc get clusterversion version -o jsonpath='{.status.conditions[?(@.type=="Degraded")].status}')" || true
     if [[ "${avail}" != "True" || ( -n "${progressing}" && "${progressing}" != "False" ) || ( -n "${degraded}" && "${degraded}" != "False" ) ]]; then
         : "CVO health check failed: Available=${avail} Progressing=${progressing} Degraded=${degraded}"
         details="${details}cvo: Available=${avail} Progressing=${progressing} Degraded=${degraded}; "
-        (( failed += 1 ))
+        (( ++failed ))
     else
         : "CVO: Available=True, Progressing=False, Degraded=False"
         details="${details}cvo: healthy; "
     fi
 
     : "Checking for firing alerts..."
-    typeset firingAlerts=""
+    typeset firingAlerts=''
     if ! firingAlerts="$(oc -n openshift-monitoring exec -c prometheus prometheus-k8s-0 -- \
         curl -s 'http://localhost:9090/api/v1/alerts' | \
         python3 -c "
@@ -289,7 +310,7 @@ print('\n'.join(names))
         : "Alert query failed or unavailable"
         details="${details}alerts: query failed; "
     elif [[ -n "${firingAlerts}" ]]; then
-        typeset alertCount
+        typeset alertCount=''
         alertCount="$(echo "${firingAlerts}" | wc -l)"
         : "WARNING: ${alertCount} alert(s) firing: ${firingAlerts}"
         details="${details}firing_alerts: ${alertCount} (${firingAlerts}); "
@@ -315,39 +336,42 @@ print('\n'.join(names))
 function CheckMcpReadiness () {
     : "=== Check 4: MachineConfigPool readiness ==="
 
-    typeset failed=0 details=""
+    typeset failed=0
+    typeset details=''
 
-    typeset mcpRaw=""
+    typeset mcpRaw=''
     if ! mcpRaw="$(oc get machineconfigpools --no-headers 2>&1)"; then
         : "Failed to query MachineConfigPools"
         details="machineconfigpools: query failed; "
-        (( failed += 1 ))
+        (( ++failed ))
     else
-        typeset mcpIssues=""
+        typeset mcpIssues=''
         mcpIssues="$(echo "${mcpRaw}" | \
             awk '$3 != "True" || $4 != "False" || $5 != "False" {print $1}')" || true
 
         if [[ -n "${mcpIssues}" ]]; then
             : "Unhealthy MachineConfigPools: ${mcpIssues}"
             details="unhealthy_mcps: ${mcpIssues}; "
-            (( failed += 1 ))
+            (( ++failed ))
 
             for mcp in ${mcpIssues}; do
                 : "### MCP ${mcp} ###"
                 oc describe machineconfigpool "${mcp}" || true
             done
         else
-            typeset mcpCount
+            typeset mcpCount=''
             mcpCount="$(echo "${mcpRaw}" | wc -l)"
             : "All ${mcpCount} MachineConfigPools are updated and not degraded"
             details="all ${mcpCount} MCPs healthy (Updated=True, Updating=False, Degraded=False); "
         fi
     fi
 
-    typeset mismatch=""
+    typeset mismatch=''
     if [[ -n "${mcpRaw:-}" ]]; then
         while IFS= read -r line; do
-            typeset mcpName ready desired
+            typeset mcpName=''
+            typeset ready=''
+            typeset desired=''
             mcpName="$(echo "${line}" | awk '{print $1}')"
             ready="$(echo "${line}" | awk '{print $7}')"
             desired="$(echo "${line}" | awk '{print $6}')"
@@ -360,7 +384,7 @@ function CheckMcpReadiness () {
     if [[ -n "${mismatch}" ]]; then
         : "MCP machine count mismatch: ${mismatch}"
         details="${details}machine_count_mismatch: ${mismatch}"
-        (( failed += 1 ))
+        (( ++failed ))
     fi
 
     oc get machineconfigpools -o json > "${REPORT_DIR}/mcp-baseline.json" 2>/dev/null || true
@@ -381,7 +405,8 @@ function Main () {
         export KUBECONFIG="${SHARED_DIR}/kubeconfig"
     fi
 
-    typeset target="${OPENSHIFT_UPGRADE_RELEASE_IMAGE_OVERRIDE:-}"
+    typeset target=''
+    target="${OPENSHIFT_UPGRADE_RELEASE_IMAGE_OVERRIDE:-}"
     if [[ -z "${target}" ]]; then
         : "OPENSHIFT_UPGRADE_RELEASE_IMAGE_OVERRIDE is not set; cannot determine upgrade target"
         exit 3
@@ -392,14 +417,17 @@ function Main () {
     KUBECONFIG="" oc registry login
     set -x
 
-    typeset targetVersion targetMajor targetMinor ocpXy
+    typeset targetVersion=''
+    typeset targetMajor=''
+    typeset targetMinor=''
+    typeset ocpXy=''
     targetVersion="$(oc adm release info "${target}" -o jsonpath='{.metadata.version}')"
     targetMajor="$(echo "${targetVersion}" | cut -f1 -d.)"
     targetMinor="$(echo "${targetVersion}" | cut -f2 -d.)"
     ocpXy="${targetMajor}.${targetMinor}"
     : "Target OCP version: ${targetVersion} (${ocpXy})"
 
-    typeset sourceVersion
+    typeset sourceVersion=''
     sourceVersion="$(oc get clusterversion --no-headers | awk '{print $2}')"
     : "Source OCP version: ${sourceVersion}"
 

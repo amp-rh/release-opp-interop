@@ -197,6 +197,7 @@ fi
 
 # Log the release image URL for debugging purposes
 typeset ocpReleaseImage
+ocpReleaseImage=""
 ocpReleaseImage="$(
     oc get clusterimageset "${clusterImagesetName}" \
         -o jsonpath='{.spec.releaseImage}' || true
@@ -223,14 +224,14 @@ fi
 typeset -a clusterNamesArr=()
 typeset uniqueSuffix=""
 typeset clusterName=""
-for ((i = 1; i <= ACM_SPOKE_CLUSTER_COUNT; i++)); do
+for ((i = 1; i <= ACM_SPOKE_CLUSTER_COUNT; ++i)); do
     uniqueSuffix="${baseSuffix}-${i}"
     clusterName="${ACM_SPOKE_CLUSTER_NAME_PREFIX}-${uniqueSuffix}"
     clusterNamesArr+=("${clusterName}")
 done
 
 : "Will create ${#clusterNamesArr[@]} cluster(s):"
-for ((i = 0; i < ${#clusterNamesArr[@]}; i++)); do
+for ((i = 0; i < ${#clusterNamesArr[@]}; ++i)); do
     ResolveSpokeCidrs "$((i + 1))"
     : "  Cluster $((i+1)): ${clusterNamesArr[i]} -> Region: ${clusterRegionsArr[i]} pod=${clusterNetworkCidr} vpc=${machineNetworkCidr} svc=${serviceNetworkCidr}"
 done
@@ -260,7 +261,7 @@ printf '%s\n' "${clusterRegionsArr[@]}" > "${allClusterRegionsFile}"
 
 # Write per-cluster network CIDRs (one CIDR per line, aligned with cluster index)
 typeset -a clusterNetworkCidrsArr=() machineNetworkCidrsArr=() serviceNetworkCidrsArr=()
-for ((i = 1; i <= ACM_SPOKE_CLUSTER_COUNT; i++)); do
+for ((i = 1; i <= ACM_SPOKE_CLUSTER_COUNT; ++i)); do
     ResolveSpokeCidrs "${i}"
     clusterNetworkCidrsArr+=("${clusterNetworkCidr}")
     machineNetworkCidrsArr+=("${machineNetworkCidr}")
@@ -751,7 +752,7 @@ typeset -i idx=0
 # Phase 1: Create all cluster resources
 # This initiates the provisioning process for all clusters in parallel
 # Each cluster is deployed to its corresponding region from the lease
-for ((i = 0; i < ${#clusterNamesArr[@]}; i++)); do
+for ((i = 0; i < ${#clusterNamesArr[@]}; ++i)); do
     idx=$((i + 1))
     CreateClusterResources "${clusterNamesArr[i]}" "${idx}" "${clusterRegionsArr[i]}"
 done
@@ -760,7 +761,7 @@ done
 
 # Phase 2: Wait for all clusters to complete provisioning
 # Each cluster typically takes 30-45 minutes to provision
-for ((i = 0; i < ${#clusterNamesArr[@]}; i++)); do
+for ((i = 0; i < ${#clusterNamesArr[@]}; ++i)); do
     idx=$((i + 1))
     WaitForClusterProvisioned "${clusterNamesArr[i]}" "${idx}"
 done
@@ -768,7 +769,7 @@ done
 : "All clusters provisioned. Extracting credentials..."
 
 # Phase 3: Extract credentials for all provisioned clusters
-for ((i = 0; i < ${#clusterNamesArr[@]}; i++)); do
+for ((i = 0; i < ${#clusterNamesArr[@]}; ++i)); do
     idx=$((i + 1))
     ExtractClusterCredentials "${clusterNamesArr[i]}" "${idx}"
 done
@@ -782,7 +783,7 @@ ln -sf "managed-cluster-metadata-1.json" "${SHARED_DIR}/managed-cluster-metadata
 : "=========================================="
 : "All ${ACM_SPOKE_CLUSTER_COUNT} spoke cluster(s) provisioned and registered with ACM"
 : "=========================================="
-for ((i = 0; i < ${#clusterNamesArr[@]}; i++)); do
+for ((i = 0; i < ${#clusterNamesArr[@]}; ++i)); do
     idx=$((i + 1))
     : "Cluster ${idx}: ${clusterNamesArr[i]} (Region: ${clusterRegionsArr[i]})"
 done

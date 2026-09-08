@@ -76,7 +76,7 @@ fi
 
 if (( ${#skipPoliciesArr[@]} > 0 )); then
   # Validate that skip-listed policies actually exist in the cluster
-  typeset allPolicies=""
+  typeset allPolicies=''
   allPolicies="$(oc get policies -n policies -o name 2>/dev/null)" || true
   for p in "${skipPoliciesArr[@]}"; do
     if ! echo "${allPolicies}" | grep -q "/${p}$"; then
@@ -86,17 +86,17 @@ if (( ${#skipPoliciesArr[@]} > 0 )); then
   done
 
   # Build a regex to filter out skipped policies
-  typeset skipRegex=""
+  typeset skipRegex=''
   skipRegex="$(IFS='|'; echo "${skipPoliciesArr[*]}")"
   # Fetch the full policy list first — fail hard if oc cannot reach the cluster
-  typeset policyList=""
+  typeset policyList=''
   policyList="$(oc get policies -n policies -o name)" || {
     printf '[%s] ERROR: failed to list policies in namespace "policies"\n' \
       "$(date -u +%FT%TZ)" >&2
     exit 1
   }
   # Filter out skipped policies (grep no-match is tolerated via || true)
-  typeset applyPolicies=""
+  typeset applyPolicies=''
   applyPolicies="$(printf '%s\n' "${policyList}" | grep -Ev "/(${skipRegex})$")" || true
 
   if [[ -n "${applyPolicies}" ]]; then

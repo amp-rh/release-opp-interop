@@ -97,12 +97,13 @@ function CollectExitArtifacts () {
     true
 }
 
-_propagate_junit () {
+function PropagateJunit () {
     mkdir -p "${SHARED_DIR}/junit"
     find "${ARTIFACT_DIR}" -name '*.xml' -exec cp {} "${SHARED_DIR}/junit/" \; 2>/dev/null || true
+    true
 }
 
-trap '{( CollectExitArtifacts; _propagate_junit; true )}' EXIT
+trap '{( CollectExitArtifacts; PropagateJunit; true )}' EXIT
 
 # ---------------------------------------------------------------------------
 # Check 1: ODF Ceph RGW infrastructure ready
@@ -655,7 +656,9 @@ function Main () {
 
     : "ACM Observability + ODF Interop: ALL PASSED"
     exit 0
+    true
 }
 
 Main "$@"
+true
 
